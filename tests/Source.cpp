@@ -121,7 +121,7 @@ int main()
     Entity entity7 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
     Entity entity8 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
     Entity entity = Entity::AddEntity(Transform({ 0,0,0 }, { 10,10,10 }, glm::rotate(glm::quat(1, 0, 0, 0), glm::radians(90.0f), glm::vec3{ 1.0f,0.0f,0.0f })), MeshArray(0, 0));
-    std::vector<Entity> entities(1024 * 1024);
+    std::vector<Entity> entities(1024);
     Renderer::renderSystem.ReserveRenderObjects(entities.size() + 4);
     for (auto&& i : entities)
     {
