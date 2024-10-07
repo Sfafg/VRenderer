@@ -1,0 +1,119 @@
+#version 450
+
+struct RenderObject
+{
+    vec3 boundingCenter;
+    float boundingRadius;
+    uint objectID;
+    uint batchID;
+};
+
+struct DrawIndexed 
+{
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    uint vertexOffset;
+    uint firstInstance;
+};
+
+layout(push_constant) uniform PushConstants{
+    mat4 projection;
+    mat4 view;
+};
+
+layout(std430, binding = 0) readonly buffer RenderObjects {
+   RenderObject renderObjects[];
+};
+layout(std430, binding = 1) buffer DrawInstructions{
+    DrawIndexed drawInstructions[];
+};
+layout(std430, binding = 2) buffer InstanceMapping{
+    uint instanceMapping[];
+};
+layout (binding = 3) uniform sampler2D depthPyramid;
+
+
+vec4 getProjectedBounds(vec3 center, float radius)
+{
+    vec3 boxMin = center - vec3( radius,radius,radius );
+    vec3 boxMax = center + vec3( radius,radius,radius );
+
+    vec3 points[8] = {
+        {boxMin.x,boxMin.y,boxMin.z},
+        {boxMin.x,boxMin.y,boxMax.z},
+        {boxMin.x,boxMax.y,boxMin.z},
+        {boxMin.x,boxMax.y,boxMax.z},
+        {boxMax.x,boxMin.y,boxMin.z},
+        {boxMax.x,boxMin.y,boxMax.z},
+        {boxMax.x,boxMax.y,boxMin.z},
+        {boxMax.x,boxMax.y,boxMax.z},
+    };
+
+    vec2 minB = vec2(1000000,1000000);
+    vec2 maxB = -vec2(1000000,1000000);
+    for (int i = 0; i < 8; i++)
+    {
+        vec4 p = projection * view * vec4(points[i], 1);
+        p /= p.w;
+        minB.x = min(minB.x, p.x);
+        minB.y = min(minB.y, p.y);
+        maxB.x = max(maxB.x, p.x);
+        maxB.y = max(maxB.y, p.y);
+    }
+
+    return vec4(
+        minB,
+        maxB
+    ) * 0.5 + 0.5;
+}
+bool isVisible(RenderObject object)
+{
+    mat4 viewProjectionTransposed = transpose(projection * view);
+    vec4 planes[6];
+    planes[0] = viewProjectionTransposed[3] + viewProjectionTransposed[0];
+    planes[1] = viewProjectionTransposed[3] - viewProjectionTransposed[0];
+    planes[2] = viewProjectionTransposed[3] + viewProjectionTransposed[1];
+    planes[3] = viewProjectionTransposed[3] - viewProjectionTransposed[1];
+    planes[4] = viewProjectionTransposed[3] + viewProjectionTransposed[2];
+    planes[5] = viewProjectionTransposed[3] - viewProjectionTransposed[2];
+
+    for (int i = 0; i < 6; ++i) {
+        float d = dot(object.boundingCenter, planes[i].xyz) + planes[i].w + object.boundingRadius;
+         
+        if (d < 0) return false;
+    }
+    
+    vec3 center = object.boundingCenter;
+    float radius = object.boundingRadius;
+    vec4 aabb = getProjectedBounds(center,radius);
+	float width = (aabb.z - aabb.x) * 1920;
+	float height = (aabb.w - aabb.y) * 1080;
+
+	//find the mipmap level that will match the screen size of the sphere
+	float level = floor(log2(max(width, height)));
+
+    float far = 1000.0;
+    float near = 0.01;
+	//sample the depth pyramid at that specific level
+	float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;
+    center = (view * vec4(center,1)).xyz;
+    float z = -center.z - radius;
+    if(z < 0)return true;
+    // float depthSphere = far/(far-near)+1.0/z*(-far * near / (far-near));
+    float depthSphere = far*(1-near/z)/(far-near);
+
+	return depthSphere <= depth;
+}
+
+layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+void main() 
+{
+    uint index = gl_GlobalInvocationID.x;
+    RenderObject object = renderObjects[index];
+    if(isVisible(object))
+    {
+        uint instanceIndex = atomicAdd(drawInstructions[object.batchID].instanceCount,1) + drawInstructions[object.batchID].firstInstance;
+        instanceMapping[instanceIndex] = object.objectID;
+    }
+}
