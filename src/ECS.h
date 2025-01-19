@@ -380,7 +380,8 @@ namespace ECS
             return;
 
         Destroy();
-        entityReferances.at(index).erase(this);
+        if (index != -1)
+            entityReferances.at(index).erase(this);
     }
 #pragma endregion
 

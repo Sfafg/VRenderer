@@ -12,15 +12,18 @@
 #include "ECS.h"
 #include "Renderer.h"
 #include "Profiler/Profiler.h"
+#include "ObjLoader.h"
 #include "Settings.h"
 using namespace ECS;
-
-std::tuple<std::vector<glm::vec3>, std::vector<uint32_t>> GenerateSphereMesh()
+using namespace std::chrono_literals;
+std::tuple<std::vector<glm::vec3>, std::vector<glm::vec3>, std::vector<glm::vec2>, std::vector<uint32_t>> GenerateSphereMesh()
 {
     std::vector<glm::vec3> vertices;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec2> uvs;
     std::vector<uint32_t> indices;
 
-    const int resolution = 8;
+    const int resolution = 14;
     for (int inclination = 0; inclination <= resolution; inclination++)
     {
         for (int azimuth = 0; azimuth < resolution * 2; azimuth++)
@@ -33,6 +36,8 @@ std::tuple<std::vector<glm::vec3>, std::vector<uint32_t>> GenerateSphereMesh()
             p.y = sin(a) * sin(b);
             p.z = cos(a);
             vertices.push_back(p);
+            normals.push_back(p);
+            uvs.push_back({ 0,0 });
         }
     }
 
@@ -45,12 +50,53 @@ std::tuple<std::vector<glm::vec3>, std::vector<uint32_t>> GenerateSphereMesh()
             indices.push_back((i + 1) * resolution * 2 + j);
 
             indices.push_back(i * resolution * 2 + j + 1);
-            indices.push_back(i * resolution * 2 + j + 1);
             indices.push_back((i + 1) * resolution * 2 + j + 1);
+            indices.push_back((i + 1) * resolution * 2 + j);
         }
     }
 
-    return { vertices,indices };
+    return { vertices, normals,uvs,indices };
+}
+std::tuple<std::vector<glm::vec3>, std::vector<glm::vec3>, std::vector<glm::vec2>, std::vector<uint32_t>> GenerateBoxMesh()
+{
+    std::vector<glm::vec3> vertices = {
+        glm::vec3(-0.5,-0.5,-0.5),
+        glm::vec3(-0.5,-0.5, 0.5),
+        glm::vec3(-0.5, 0.5,-0.5),
+        glm::vec3(-0.5, 0.5, 0.5),
+        glm::vec3(0.5,-0.5,-0.5),
+        glm::vec3(0.5,-0.5, 0.5),
+        glm::vec3(0.5, 0.5,-0.5),
+        glm::vec3(0.5, 0.5, 0.5),
+    };
+    std::vector<glm::vec3> normals = {
+        glm::normalize(glm::vec3(-0.5,-0.5,-0.5)),
+        glm::normalize(glm::vec3(-0.5,-0.5, 0.5)),
+        glm::normalize(glm::vec3(-0.5, 0.5,-0.5)),
+        glm::normalize(glm::vec3(-0.5, 0.5, 0.5)),
+        glm::normalize(glm::vec3(0.5,-0.5,-0.5)),
+        glm::normalize(glm::vec3(0.5,-0.5, 0.5)),
+        glm::normalize(glm::vec3(0.5, 0.5,-0.5)),
+        glm::normalize(glm::vec3(0.5, 0.5, 0.5)),
+    };
+    std::vector<glm::vec2> uvs = {
+        glm::vec2(0,0),
+        glm::vec2(0,0),
+        glm::vec2(0,0),
+        glm::vec2(0,0),
+        glm::vec2(0,0),
+        glm::vec2(0,0),
+        glm::vec2(0,0),
+        glm::vec2(0,0),
+    };
+    std::vector<uint32_t> indices = {
+        2,1,0, 1,2,3,
+        5,4,0, 0,1,5,
+        2,6,7, 7,3,2,
+
+    };
+
+    return { vertices, normals,uvs,indices };
 }
 glm::quat fromTo(glm::vec3 a, glm::vec3 b)
 {
@@ -69,11 +115,11 @@ glm::quat fromTo(glm::vec3 a, glm::vec3 b)
 }
 int main()
 {
+    Profiler::SetHightPriority();
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     GLFWwindow* window = glfwCreateWindow(1920, 1080, "VRendererTest", nullptr, nullptr);
-    // glfwSetWindowPos(window, -1920, 0);
     int w, h; glfwGetFramebufferSize(window, &w, &h);
 
     vg::instance = vg::Instance({ "VK_KHR_surface", "VK_KHR_win32_surface" },
@@ -97,44 +143,62 @@ int main()
         Material(
             std::vector<vg::Shader*>{ &vertexShader, & fragmentShader },
             vg::InputAssembly(vg::Primitive::Triangles, false),
-            vg::Rasterizer(false, vg::PolygonMode::Fill, vg::CullMode::None),
+            vg::Rasterizer(false, false, vg::PolygonMode::Fill, vg::CullMode::Back, vg::FrontFace::Clockwise),
             vg::Multisampling(1, false),
             vg::DepthStencil(true, true, vg::CompareOp::Less),
             vg::ColorBlending(true, vg::LogicOp::Copy, { 0,0,0,0 }, { vg::ColorBlend() }),
             { vg::DynamicState::Viewport, vg::DynamicState::Scissor }
         ));
+    Renderer::materials[0].AddVariant(VariantData{ 1.0f, 0.45f, 0.0f });
+    Renderer::materials[0].AddVariant(VariantData{ 0.0f, 1.0f, 0.2f });
+    Renderer::materials[0].AddVariant(VariantData{ 0.0f, 0.0f, 1.0f });
 
-    Renderer::Init(window, windowSurface, 1920, 1080);
-    Renderer::renderSystem.AddMesh(
-        { 0,1,2,1,2,3 },
-        { { glm::vec3{-0.5f,-0.5f,0},glm::vec3{-0.5f, 0.5f,0},glm::vec3{ 0.5f,-0.5f,0},glm::vec3{ 0.5f, 0.5f,0} } }
-    );
-
-    auto [vertices, triangles] = GenerateSphereMesh();
-    Renderer::renderSystem.AddMesh(triangles, vertices);
-    Entity entity1 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
-    Entity entity2 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
-    Entity entity3 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
-    Entity entity4 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
-    Entity entity5 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
-    Entity entity6 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
-    Entity entity7 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
-    Entity entity8 = Entity::AddEntity(Transform({ 100,0,0 }, { 0.25f,0.25f,0.25f }), MeshArray(0, 1));
-    Entity entity = Entity::AddEntity(Transform({ 0,0,0 }, { 10,10,10 }, glm::rotate(glm::quat(1, 0, 0, 0), glm::radians(90.0f), glm::vec3{ 1.0f,0.0f,0.0f })), MeshArray(0, 0));
-    std::vector<Entity> entities(1024);
-    Renderer::renderSystem.ReserveRenderObjects(entities.size() + 4);
-    for (auto&& i : entities)
+    Renderer::Init(window, windowSurface, w, h);
     {
+        auto [vertices, normals, uvs, triangles] = GenerateSphereMesh();
+        Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
+    }
+    std::vector<glm::vec3> vertices, normals;
+    std::vector<glm::vec2> uvs;
+    std::vector<uint32_t> triangles;
+
+    LoadMesh("resources/Monkey.obj", &vertices, &normals, &triangles);
+    uvs.resize(vertices.size());
+    Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
+    vertices.clear();
+    normals.clear();
+    uvs.clear();
+    LoadMesh("resources/Box.obj", &vertices, &normals, &triangles);
+    uvs.resize(vertices.size());
+    Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
+
+    vertices.clear();
+    normals.clear();
+    uvs.clear();
+    LoadMesh("resources/Bottle.obj", &vertices, &normals, &triangles);
+    uvs.resize(vertices.size());
+    Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
+
+
+    std::vector<Entity> entities(1024 * 8);
+    Renderer::renderSystem[0].ReserveRenderObjects(entities.size());
+    entities[0] = Entity::AddEntity(Transform({ 0,0,0 }, { 3,3,3 }), MeshArray(0, 0, 1));
+
+    for (int j = 1; j < entities.size(); j++)
+    {
+        auto&& i = entities[j];
         auto rFloat = [](float min, float max) {return rand() / float(RAND_MAX) * (max - min) + min; };
         glm::vec3 pos(rFloat(-50, 50), rFloat(-50, 50), rFloat(-50, 50));
-        glm::vec3 scale(rFloat(0.5, 1), rFloat(0.5, 1), rFloat(0.5, 1));
+        glm::vec3 scale(rFloat(1.5, 3), rFloat(1.5, 3), rFloat(1.5, 3));
         glm::vec3 axis(rFloat(-1, 1), rFloat(-1, 1), rFloat(-1, 1));
         float angle = rFloat(0, 360);
         axis = glm::normalize(axis);
-        i = Entity::AddEntity(Transform(pos, scale, glm::rotate(glm::quat(1, 0, 0, 0), angle, axis)), MeshArray(0, 0));
+        int variant = rand() % 3;
+        int mesh = rand() % 3;
+        i = Entity::AddEntity(Transform(pos, scale, glm::rotate(glm::quat(1, 0, 0, 0), angle, axis)), MeshArray(0, variant, mesh));
     }
 
-    Transform cameraTransform({ 0,-2,0 });
+    Transform cameraTransform({ 0,-8,0 });
     static float fov = glm::radians(70.0f);
     glfwSetScrollCallback(window, [](GLFWwindow* window, double scrollx, double scrolly)
         {
@@ -177,7 +241,7 @@ int main()
                     cameraTransform.rotation = glm::rotate(rotation, (float) mouseDelta.y, { 1,0,0 });
                 }
 
-                float speed = 0.1f;
+                float speed = 0.4f;
                 if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT))
                     speed *= 0.2;
                 if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL))

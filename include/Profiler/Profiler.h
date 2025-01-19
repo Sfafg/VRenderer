@@ -8,8 +8,8 @@
 class Profiler
 {
 public:
-    static const unsigned int maxFunctions = 128;
-    static const unsigned int maxFunctionNameLength = 32;
+    static const unsigned int maxFunctions = 32;
+    static const unsigned int maxFunctionNameLength = 128;
     static const unsigned int maxSampleCount = 16384;
 
     class Function;
@@ -56,7 +56,7 @@ public:
 
     enum FunctionType
     {
-        Time, Memory
+        Time, Memory, Count
     };
 
     class Function

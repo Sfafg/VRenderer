@@ -732,9 +732,9 @@ namespace vg
     struct InputAssembly
     {
     private:
-        uint32_t reserved_1 = 20;
-        void* reserved_2 = nullptr;
-        uint32_t reserved_3 = 0;
+        const uint32_t reserved_1 = 20;
+        const void* reserved_2 = nullptr;
+        const uint32_t reserved_3 = 0;
 
     public:
         Primitive primitive = Primitive::Points;
@@ -750,9 +750,9 @@ namespace vg
     struct Tesselation
     {
     private:
-        uint32_t reserved_1 = 21;
-        void* reserved_2 = nullptr;
-        uint32_t reserved_3 = 0;
+        const uint32_t reserved_1 = 21;
+        const void* reserved_2 = nullptr;
+        const uint32_t reserved_3 = 0;
         int reserved_4 = 0;
 
     public:
@@ -762,9 +762,9 @@ namespace vg
     struct ViewportState
     {
     private:
-        uint32_t reserved_1 = 22;
-        void* reserved_2 = nullptr;
-        uint32_t reserved_3 = 0;
+        const uint32_t reserved_1 = 22;
+        const void* reserved_2 = nullptr;
+        const uint32_t reserved_3 = 0;
 
     public:
         uint32_t viewportCount = 0;
@@ -839,9 +839,9 @@ namespace vg
     struct Rasterizer
     {
     private:
-        uint32_t reserved_1 = 23;
-        void* reserved_2 = nullptr;
-        uint32_t reserved_3 = 0;
+        const uint32_t reserved_1 = 23;
+        const void* reserved_2 = nullptr;
+        const uint32_t reserved_3 = 0;
 
     public:
         uint32_t depthClamp = 0;
@@ -853,11 +853,10 @@ namespace vg
         float lineWidth = 1.0f;
 
         Rasterizer()
-            :discard(true)
         {}
 
-        Rasterizer(bool depthClamp, PolygonMode polygonMode, CullMode cullMode = CullMode::Back, FrontFace frontFace = FrontFace::CounterClockwise, DepthBias depthBias = DepthBias(), float lineWidth = 1.0f)
-            :discard(false), depthClamp(depthClamp), polygonMode(polygonMode), cullMode(cullMode), frontFace(frontFace), depthBias(depthBias), lineWidth(lineWidth)
+        Rasterizer(bool depthClamp, bool discard, PolygonMode polygonMode, CullMode cullMode = CullMode::Back, FrontFace frontFace = FrontFace::CounterClockwise, DepthBias depthBias = DepthBias(), float lineWidth = 1.0f)
+            :discard(discard), depthClamp(depthClamp), polygonMode(polygonMode), cullMode(cullMode), frontFace(frontFace), depthBias(depthBias), lineWidth(lineWidth)
         {}
 
 
@@ -866,15 +865,15 @@ namespace vg
     struct Multisampling
     {
     private:
-        uint32_t reserved_1 = 24;
-        void* reserved_2 = nullptr;
-        uint32_t reserved_3 = 0;
+        const uint32_t reserved_1 = 24;
+        const void* reserved_2 = nullptr;
+        const uint32_t reserved_3 = 0;
 
     public:
         uint32_t rasterizationSamples = 1;
         uint32_t sampleShadingEnable = 0;
         float minSampleShading = 0;
-        void* sampleMask = nullptr;
+        const void* sampleMask = nullptr;
         uint32_t alphaToCoverageEnable = 0;
         uint32_t alphaToOneEnable = 0;
 
@@ -909,9 +908,9 @@ namespace vg
     struct DepthStencil
     {
     private:
-        uint32_t reserved_1 = 25;
-        void* reserved_2 = nullptr;
-        uint32_t reserved_3 = 0;
+        const uint32_t reserved_1 = 25;
+        const void* reserved_2 = nullptr;
+        const uint32_t reserved_3 = 0;
     public:
         uint32_t depthTestEnable = 0;
         uint32_t depthWriteEnable = 0;

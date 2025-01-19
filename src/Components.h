@@ -22,12 +22,13 @@ struct Transform : public ECS::Component<Transform>
 
 struct MeshArray : public ECS::Component<MeshArray>
 {
-    uint16_t materialID;
+    uint8_t materialID;
+    uint8_t materialVariantID;
     uint16_t meshID;
 
     MeshArray() {}
-    MeshArray(uint16_t materialID, uint16_t meshID)
-        :materialID(materialID), meshID(meshID)
+    MeshArray(uint8_t materialID, uint8_t materialVariantID, uint16_t meshID)
+        :materialID(materialID), materialVariantID(materialVariantID), meshID(meshID)
     {}
 };
 

@@ -13,8 +13,8 @@ class Renderer : public ECS::System<MeshArray>
     static vg::Swapchain swapchain;
 
     static std::vector<vg::Framebuffer> framebuffers;
-    static vg::Image depthImage;
-    static vg::ImageView depthImageView;
+    static std::vector<vg::Image> depthImage;
+    static std::vector<vg::ImageView> depthImageView;
     static std::vector<vg::CmdBuffer> commandBuffer;
     static std::vector<vg::Semaphore> renderFinishedSemaphore;
     static std::vector<vg::Semaphore> imageAvailableSemaphore;
@@ -22,7 +22,7 @@ class Renderer : public ECS::System<MeshArray>
     static int frameIndex;
 
 public:
-    static GPUDrivenRendererSystem renderSystem;
+    static std::vector<GPUDrivenRendererSystem> renderSystem;
     static std::vector<Material> materials;
     static void Init(void* window, vg::SurfaceHandle windowSurface, int width, int height);
 

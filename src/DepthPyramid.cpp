@@ -3,94 +3,89 @@
 
 DepthPyramid::DepthPyramid(uint32_t width, uint32_t height)
 {
-    vg::Shader vertexPass = vg::Shader(vg::ShaderStage::Vertex, "resources/shaders/passthrough.vert.spv");
-    depthPrepass = vg::RenderPass(
+    vg::Shader reductionShader(vg::ShaderStage::Compute, "resources/shaders/Reduction.comp.spv");
+    computeReduction = vg::ComputePipeline(
+        reductionShader,
         {
-            vg::Attachment(vg::Format::D32SFLOAT, vg::ImageLayout::DepthAttachmentOptimal)
+            {
+                {0,vg::DescriptorType::CombinedImageSampler,1,vg::ShaderStage::Compute},
+                {1,vg::DescriptorType::StorageImage,1,vg::ShaderStage::Compute}
+            }
         },
         {
-            vg::Subpass(
-                vg::GraphicsPipeline(
-                    { {{0,vg::DescriptorType::StorageBuffer,1,vg::ShaderStage::Vertex}} },
-                    { vg::PushConstantRange({vg::ShaderStage::Vertex, vg::ShaderStage::Compute},0, sizeof(glm::mat4)) },
-                    { &vertexPass },
-                    {
-                        { {0, sizeof(glm::vec3)}, {1,sizeof(int),vg::InputRate::Instance} },
-                        { {0, 0, vg::Format::RGB32SFLOAT}, {1,1,vg::Format::R32UINT} }
-                    },
-                    vg::InputAssembly(vg::Primitive::Triangles),
-                    vg::Tesselation(),
-                    vg::ViewportState(vg::Viewport(), vg::Scissor()),
-                    vg::Rasterizer(),
-                    vg::Multisampling(1),
-                    vg::DepthStencil(true, true, vg::CompareOp::Less),
-                    vg::ColorBlending(),
-                    { vg::DynamicState::Viewport,vg::DynamicState::Scissor }
-                ),
-                {}, {},
-                {}, vg::AttachmentReference(0, vg::ImageLayout::DepthStencilAttachmentOptimal)
-            )
-        },
-        { vg::SubpassDependency(-1, 0, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0, vg::Access::DepthStencilAttachmentWrite, {}) }
+            vg::PushConstantRange(vg::ShaderStage::Compute, 0, sizeof(glm::ivec2))
+        }
     );
+    pool = vg::DescriptorPool(16, { { vg::DescriptorType::CombinedImageSampler, 16} ,{ vg::DescriptorType::StorageImage, 16} });
+    reductionCmdBuffer = vg::CmdBuffer(vg::currentDevice->GetQueue(0), false, vg::CmdBufferLevel::Secondary);
 }
 
-void DepthPyramid::SetSize(uint32_t width, uint32_t height)
+vg::cmd::ExecuteCommands DepthPyramid::Generate(
+    vg::CmdBuffer& cmdBuffer,
+    const vg::Image& depth,
+    const vg::ImageView& depthView)
 {
-    if (pyramidImage.GetDimensions()[0] == width && pyramidImage.GetDimensions()[1] == height)
-        return;
+    uint32_t width = depth.GetDimensions()[0] / 2, height = depth.GetDimensions()[1] / 2;
+    if (pyramidImage.GetDimensions()[0] != width || pyramidImage.GetDimensions()[1] != height)
+    {
+        // Prepare the pyramid resources.
+        int mipLevels = int(std::floor(std::log2(std::max(width, height)))) + 1;
+        pyramidImage = vg::Image({ width,height }, vg::Format::R32SFLOAT, { vg::ImageUsage::Storage, vg::ImageUsage::Sampled }, mipLevels);
+        vg::Allocate(pyramidImage, { vg::MemoryProperty::DeviceLocal });
+        pyramidImageView = vg::ImageView(pyramidImage, vg::ImageSubresource(vg::ImageAspect::Color, 0, mipLevels));
+        reductionSampler = vg::Sampler(
+            vg::Filter::Linear, vg::Filter::Linear,
+            vg::SamplerMipmapMode::Nearest,
+            vg::SamplerAddressMode::ClampToEdge,
+            vg::SamplerAddressMode::ClampToEdge,
+            vg::SamplerAddressMode::ClampToEdge,
+            0.0f, 0.0f, mipLevels,
+            vg::SamplerReduction::Max
+        );
+        mipImageViews.resize(mipLevels);
+        descriptors.reserve(mipLevels);
+        pool.Allocate(std::vector<vg::DescriptorSetLayoutHandle>(mipLevels, computeReduction.GetPipelineLayout().GetDescriptorSets()[0]), &descriptors);
 
-    // int mipLevels = (uint32_t) std::floor(std::log2(std::min({ width,height })));
+        // Record the commands for pyramid creation.
+        reductionCmdBuffer.Clear().Begin({}, vg::RenderPass(), 0, vg::Framebuffer()).Append(vg::cmd::BindPipeline(computeReduction));
+        uint32_t inputWidth = depth.GetDimensions()[0], inputHeight = depth.GetDimensions()[1];
+        for (int i = 0; i < mipLevels; i++)
+        {
+            mipImageViews[i] = vg::ImageView(pyramidImage, vg::ImageSubresource(vg::ImageAspect::Color, i, 1));
+            const vg::ImageView& previousView = i == 0 ? depthView : mipImageViews[i - 1];
+            descriptors[i].AttachImage(vg::DescriptorType::CombinedImageSampler, vg::ImageLayout::ShaderReadOnlyOptimal, previousView, reductionSampler, 0, 0);
+            descriptors[i].AttachImage(vg::DescriptorType::StorageImage, vg::ImageLayout::General, mipImageViews[i], reductionSampler, 1, 0);
 
-    pyramidImage = vg::Image({ width / 2,height / 2 }, vg::Format::R32SFLOAT, { vg::ImageUsage::Storage ,vg::ImageUsage::Sampled }, 1);
-    vg::Allocate(pyramidImage, { vg::MemoryProperty::DeviceLocal });
-    pyramidImageView = vg::ImageView(pyramidImage, vg::ImageSubresource(vg::ImageAspect::Color, 0, 1));
-    depthFramebuffer = vg::Framebuffer(depthPrepass, { pyramidImageView }, width, height, 1);
+            vg::ImageMemoryBarrier previousImageBarrier;
+            if (i == 0)
+                previousImageBarrier = vg::ImageMemoryBarrier(depth, vg::ImageLayout::DepthStencilAttachmentOptimal, vg::ImageLayout::ShaderReadOnlyOptimal, vg::Access::ShaderWrite, vg::Access::ShaderRead, vg::ImageSubresource(vg::ImageAspect::Depth, 0, 1));
+            else
+                previousImageBarrier = vg::ImageMemoryBarrier(pyramidImage, vg::ImageLayout::General, vg::ImageLayout::ShaderReadOnlyOptimal, 0, vg::Access::ShaderRead, vg::ImageSubresource(vg::ImageAspect::Color, i - 1, 1));
+
+            reductionCmdBuffer.Append(
+                vg::cmd::PipelineBarier(vg::PipelineStage::ComputeShader, vg::PipelineStage::ComputeShader,
+                    {
+                    previousImageBarrier,
+                    vg::ImageMemoryBarrier(pyramidImage,vg::ImageLayout::General, vg::Access::ShaderWrite, vg::Access::ShaderRead, vg::ImageSubresource(vg::ImageAspect::Color, i, 1))
+                    }
+                ),
+                vg::cmd::BindDescriptorSets(computeReduction.GetPipelineLayout(), vg::PipelineBindPoint::Compute, 0, { descriptors[i] }),
+                vg::cmd::PushConstants(computeReduction.GetPipelineLayout(), vg::ShaderStage::Compute, 0, std::make_tuple(inputHeight, inputWidth)),
+                vg::cmd::Dispatch(std::ceil(width / 16.0f), std::ceil(height / 16.0f), 1)
+            );
+            inputWidth = width;
+            inputHeight = height;
+            width = std::max({ width / 2, 1U });
+            height = std::max({ height / 2, 1U });
+        }
+        reductionCmdBuffer.Append(
+            vg::cmd::PipelineBarier(vg::PipelineStage::ComputeShader, vg::PipelineStage::ComputeShader,
+                {
+                vg::ImageMemoryBarrier(pyramidImage, vg::ImageLayout::General,vg::ImageLayout::ShaderReadOnlyOptimal, vg::Access::ShaderWrite, vg::Access::ShaderRead, vg::ImageSubresource(vg::ImageAspect::Color, mipLevels - 1, 1))
+                }
+            )
+        ).End();
+    }
+
+    return vg::cmd::ExecuteCommands({ reductionCmdBuffer });
 }
-
-// void DepthPyramid::Generate(vg::CmdBuffer& commandBuffer)
-// {
-//     commandBuffer.Append(
-//         vg::cmd::PipelineBarier(
-//             vg::PipelineStage::ComputeShader, vg::PipelineStage::ComputeShader,
-//             {
-//                 { pyramidImage, vg::ImageLayout::General, vg::Access::ShaderRead,vg::Access::ShaderRead, {vg::ImageAspect::Color,0,(uint32_t) reductionDescriptors.size()}},
-//                 { depthImage,vg::ImageLayout::DepthStencilAttachmentOptimal, vg::ImageLayout::ShaderReadOnlyOptimal, vg::Access::ShaderRead,vg::Access::ShaderRead, {vg::ImageAspect::Depth,0,1} }
-//             })
-//     );
-
-//     vg::cmd::PipelineBarier barrier(
-//         vg::PipelineStage::ComputeShader, vg::PipelineStage::ComputeShader,
-//         {
-//              {pyramidImage, vg::ImageLayout::General, vg::ImageLayout::ShaderReadOnlyOptimal, vg::Access::ShaderWrite, vg::Access::ShaderWrite, {vg::ImageAspect::Color,0,1}}
-//         }
-//     );
-//     uint32_t pyramidWidth = pyramidImage.GetDimensions()[0], pyramidHeight = pyramidImage.GetDimensions()[1];
-//     for (int i = 0; i < reductionDescriptors.size(); i++)
-//     {
-//         if (i == 0)
-//             reductionDescriptors[i].AttachImage(vg::DescriptorType::CombinedImageSampler, vg::ImageLayout::ShaderReadOnlyOptimal, depthView, reductionSampler, 0, 0);
-//         else
-//             reductionDescriptors[i].AttachImage(vg::DescriptorType::CombinedImageSampler, vg::ImageLayout::ShaderReadOnlyOptimal, reductionImageViews[i - 1], reductionSampler, 0, 0);
-
-//         reductionDescriptors[i].AttachImage(vg::DescriptorType::StorageImage, vg::ImageLayout::General, reductionImageViews[i], reductionSampler, 1, 0);
-//         barrier.imageMemoryBarriers[0].subresourceRange.baseMipLevel = i;
-//         commandBuffer.Append(
-//             vg::cmd::BindPipeline(computePipeline),
-//             vg::cmd::BindDescriptorSets(computePipeline.GetPipelineLayout(), vg::PipelineBindPoint::Compute, 0, { reductionDescriptors[i] }),
-//             vg::cmd::PushConstants(computePipeline.GetPipelineLayout(), vg::ShaderStage::Compute, 0, std::make_tuple(pyramidHeight, pyramidWidth)),
-//             vg::cmd::Dispatch(ceil(pyramidWidth / 16.0f), ceil(pyramidHeight / 16.0f), 1),
-//             barrier
-//         );
-//         pyramidWidth = std::max(pyramidWidth / 2, 1U);
-//         pyramidHeight = std::max(pyramidHeight / 2, 1U);
-//     }
-
-//     commandBuffer.Append(
-//         vg::cmd::PipelineBarier(
-//             vg::PipelineStage::ComputeShader, vg::PipelineStage::ComputeShader,
-//             {
-//                 {depthImage, vg::ImageLayout::ShaderReadOnlyOptimal, vg::ImageLayout::DepthStencilAttachmentOptimal, vg::Access::ShaderWrite,vg::Access::ShaderWrite, {vg::ImageAspect::Depth,0,1}}
-//             })
-//     );
-// }

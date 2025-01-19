@@ -11,12 +11,51 @@ public:
     BufferArray() : buffer(nullptr), m_size(0), m_begin(nullptr) {}
 
     BufferArray(int count, vg::Flags<vg::BufferUsage> usage)
-        :buffer(new vg::Buffer(count * sizeof(T), usage)), usage(usage), m_size(0)
+        : usage(usage), m_size(count)
     {
         this->usage.Set(vg::BufferUsage::TransferDst);
         this->usage.Set(vg::BufferUsage::TransferSrc);
+        if (count == 0)
+            count = 1;
+        buffer.reset(new vg::Buffer(count * sizeof(T), usage));
         vg::Allocate(buffer.get(), { vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent });
         m_begin = (T*) buffer.get()->MapMemory();
+    }
+
+    BufferArray(BufferArray&& rhs) noexcept
+        :BufferArray()
+    {
+        *this = std::move(rhs);
+    }
+
+    BufferArray(const BufferArray& rhs)
+        :BufferArray()
+    {
+        *this = rhs;
+    }
+
+    BufferArray& operator=(BufferArray&& rhs)
+    {
+        if (&rhs == this)return *this;
+
+        std::swap(deviceBuffer, rhs.deviceBuffer);
+        std::swap(buffer, rhs.buffer);
+        std::swap(m_size, rhs.m_size);
+        std::swap(m_begin, rhs.m_begin);
+        std::swap(usage, rhs.usage);
+
+        return *this;
+    }
+
+    BufferArray& operator=(const BufferArray& rhs)
+    {
+        if (&rhs == this)return *this;
+
+        resize(rhs.size());
+        memcpy(begin(), rhs.begin(), size() * sizeof(T));
+        usage = rhs.usage;
+
+        return *this;
     }
 
     void reserve(uint32_t count)
@@ -57,6 +96,14 @@ public:
         if (cap < m_size)
             reserve((cap + 1) * 1.71f);
         data()[m_size - 1] = element;
+    }
+    void emplace_back(T&& element)
+    {
+        m_size++;
+        auto cap = capacity();
+        if (cap < m_size)
+            reserve((cap + 1) * 1.71f);
+        data()[m_size - 1] = std::move(element);
     }
     void pop_back()
     {

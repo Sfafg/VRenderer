@@ -634,6 +634,34 @@ namespace vg
             friend CmdBuffer;
             SubpassContents subpassContents;
         };
+
+        struct ResetQueryPool
+        {
+            ResetQueryPool(QueryPoolHandle queryPool, int queryCount, int firstQuery = 0) :
+                queryPool(queryPool), queryCount(queryCount), firstQuery(firstQuery)
+            {}
+        private:
+            void operator()(CmdBuffer& commandBuffer) const;
+            friend CmdBuffer;
+            QueryPoolHandle queryPool;
+            int queryCount;
+            int firstQuery;
+
+        };
+        struct WriteTimestamp
+        {
+            WriteTimestamp(Flags<PipelineStage> pipelineStage, QueryPoolHandle queryPool, uint32_t query) :
+                pipelineStage(pipelineStage),
+                queryPool(queryPool),
+                query(query)
+            {}
+        private:
+            void operator()(CmdBuffer& commandBuffer) const;
+            friend CmdBuffer;
+            Flags<PipelineStage> pipelineStage;
+            QueryPoolHandle queryPool;
+            uint32_t query;
+        };
     }
 
 
@@ -708,7 +736,7 @@ namespace vg
          * @tparam T class derived from cmd::Command
          * @param commands Array of commands from cmd:: namespace
          */
-        template<Commands... T>
+        template<typename... T>
         CmdBuffer& Append(const T&... commands) { (..., _Append(std::move(commands))); return *this; }
 
         /**

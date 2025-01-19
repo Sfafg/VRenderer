@@ -19,21 +19,24 @@ set(SRC
     ${SRC_ROOT}/GPUDrivenRendererSystem.cpp
     ${SRC_ROOT}/DepthPyramid.cpp
     ${SRC_ROOT}/Mesh.cpp
+    ${SRC_ROOT}/ObjLoader.cpp
     ${SRC_ROOT}/Renderer.cpp
     include/Profiler/Profiler.cpp
 )
 
 set(SHADERS
     ${SHADER_ROOT}/Renderer.comp
+    ${SHADER_ROOT}/ClearInstructions.comp
+    ${SHADER_ROOT}/Reduction.comp
     ${SHADER_ROOT}/shader.frag
     ${SHADER_ROOT}/shader.vert
     ${SHADER_ROOT}/passthrough.vert
-
-    # ${SHADER_ROOT}/reduction.frag
-    # ${SHADER_ROOT}/reduction.vert
 )
 
 set(RESOURCES
+    ${RESOURCES_ROOT}/Box.obj
+    ${RESOURCES_ROOT}/Monkey.obj
+    ${RESOURCES_ROOT}/Bottle.obj
 )
 
 file(MAKE_DIRECTORY ${TESTS_ROOT} ${SRC_ROOT} ${RESOURCES_ROOT} ${RESOURCES_OUTPUT_DIR} ${SHADER_ROOT} ${SHADER_OUTPUT_DIR})

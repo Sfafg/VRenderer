@@ -3,20 +3,25 @@
 #include <unordered_map>
 void Renderer::Init(void* window, vg::SurfaceHandle windowSurface, int width, int height)
 {
+    frameIndex = 0;
     Renderer::window = window;
     surface = vg::Surface(windowSurface, { vg::Format::BGRA8SRGB, vg::ColorSpace::SRGBNL });
-    swapchain = vg::Swapchain(surface, 2, width, height, vg::Usage::ColorAttachment, vg::PresentMode::Immediate);
+    swapchain = vg::Swapchain(surface, 2, width, height, vg::Usage::ColorAttachment, vg::PresentMode::Fifo);
 
-    depthImage = vg::Image({ swapchain.GetWidth(), swapchain.GetHeight() }, { vg::Format::D32SFLOAT,vg::Format::D32SFLOATS8UINT,vg::Format::x8D24UNORMPACK }, { vg::FormatFeature::DepthStencilAttachment }, { vg::ImageUsage::DepthStencilAttachment,vg::ImageUsage::Sampled });
-    vg::Allocate({ &depthImage }, { vg::MemoryProperty::DeviceLocal });
-    depthImageView = vg::ImageView(depthImage, { vg::ImageAspect::Depth });
-
-    renderSystem = GPUDrivenRendererSystem(materials, { vg::Attachment(surface.GetFormat(),vg::ImageLayout::PresentSrc) , vg::Attachment(depthImage.GetFormat(),vg::ImageLayout::DepthStencilAttachmentOptimal) }, swapchain.GetImageCount(), &vg::currentDevice->GetQueue(0));
-
+    depthImage.resize(swapchain.GetImageCount());
+    depthImageView.resize(swapchain.GetImageCount());
     framebuffers.resize(swapchain.GetImageCount());
-    frameIndex = 0;
+    renderSystem.resize(swapchain.GetImageCount());
     for (int i = 0; i < framebuffers.size(); i++)
-        framebuffers[i] = vg::Framebuffer(renderSystem.renderPass, { swapchain.GetImageViews()[i],depthImageView }, swapchain.GetWidth(), swapchain.GetHeight());
+    {
+        depthImage[i] = vg::Image({ swapchain.GetWidth(), swapchain.GetHeight() }, { vg::Format::D32SFLOAT,vg::Format::D32SFLOATS8UINT,vg::Format::x8D24UNORMPACK }, { vg::FormatFeature::DepthStencilAttachment }, { vg::ImageUsage::DepthStencilAttachment,vg::ImageUsage::Sampled });
+        vg::Allocate({ &depthImage[i] }, { vg::MemoryProperty::DeviceLocal });
+        depthImageView[i] = vg::ImageView(depthImage[i], { vg::ImageAspect::Depth });
+        renderSystem[i] = GPUDrivenRendererSystem(materials, { vg::Attachment(surface.GetFormat(),vg::ImageLayout::PresentSrc) , vg::Attachment(depthImage[0].GetFormat(),vg::ImageLayout::DepthStencilAttachmentOptimal) }, depthImage[i], depthImageView[i], &vg::currentDevice->GetQueue(0));
+    }
+
+    for (int i = 0; i < framebuffers.size(); i++)
+        framebuffers[i] = vg::Framebuffer(GPUDrivenRendererSystem::renderPass, { swapchain.GetImageViews()[i],depthImageView[i] }, swapchain.GetWidth(), swapchain.GetHeight());
 
     commandBuffer.resize(swapchain.GetImageCount());
     renderFinishedSemaphore.resize(swapchain.GetImageCount());
@@ -34,7 +39,7 @@ void Renderer::Init(void* window, vg::SurfaceHandle windowSurface, int width, in
 
 void Renderer::Add(MeshArray& component)
 {
-    renderSystem.AddRenderObject(component.meshID, component.materialID, component.GetComponent<Transform>().Matrix());
+    renderSystem[frameIndex].AddRenderObject(component.meshID, component.materialID, component.materialVariantID, component.GetComponent<Transform>().Matrix());
 }
 void Renderer::Destroy(MeshArray& component)
 {
@@ -59,11 +64,15 @@ void Renderer::DrawFrame(Transform cameraTransform, float fov)
 
         std::swap(oldSwapchain, swapchain);
         swapchain = vg::Swapchain(surface, 2, width, height, oldSwapchain);
-        depthImage = vg::Image({ swapchain.GetWidth(), swapchain.GetHeight() }, depthImage.GetFormat(), { vg::ImageUsage::DepthStencilAttachment, vg::ImageUsage::Sampled });
-        vg::Allocate(Span<vg::Image* const>{&depthImage }, { vg::MemoryProperty::DeviceLocal });
-        depthImageView = vg::ImageView(depthImage, { vg::ImageAspect::Depth });
+        depthImage.resize(swapchain.GetImageCount());
+        depthImageView.resize(swapchain.GetImageCount());
         for (int i = 0; i < framebuffers.size(); i++)
-            framebuffers[i] = vg::Framebuffer(renderSystem.renderPass, { swapchain.GetImageViews()[i], depthImageView }, swapchain.GetWidth(), swapchain.GetHeight());
+        {
+            depthImage[i] = vg::Image({ swapchain.GetWidth(), swapchain.GetHeight() }, depthImage[i].GetFormat(), { vg::ImageUsage::DepthStencilAttachment, vg::ImageUsage::Sampled });
+            vg::Allocate(Span<vg::Image* const>{&depthImage[i] }, { vg::MemoryProperty::DeviceLocal });
+            depthImageView[i] = vg::ImageView(depthImage[i], { vg::ImageAspect::Depth });
+            framebuffers[i] = vg::Framebuffer(GPUDrivenRendererSystem::renderPass, { swapchain.GetImageViews()[i], depthImageView[i] }, swapchain.GetWidth(), swapchain.GetHeight());
+        }
     }
 
     auto [imageIndex, result] = swapchain.GetNextImageIndex(imageAvailableSemaphore[frameIndex]);
@@ -72,8 +81,12 @@ void Renderer::DrawFrame(Transform cameraTransform, float fov)
     glm::mat4 cameraProjection = glm::perspective(fov, (float) width / (float) height, 0.01f, 1000.0f);
     cameraProjection[1][1] *= -1;
 
+    int prevFrame = frameIndex - 1;
+    if (prevFrame < 0) prevFrame = swapchain.GetImageCount() + prevFrame;
+    renderSystem[frameIndex].CopyData(renderSystem[prevFrame]);
+
     commandBuffer[frameIndex].Clear().Begin();
-    renderSystem.GetRenderCommands(depthImage, depthImageView, commandBuffer[frameIndex], cameraView, cameraProjection, framebuffers[frameIndex], width, height);
+    renderSystem[frameIndex].GetRenderCommands(depthImage[frameIndex], depthImageView[frameIndex], commandBuffer[frameIndex], cameraView, cameraProjection, framebuffers[frameIndex], width, height);
     commandBuffer[frameIndex].End().Submit({ {vg::PipelineStage::ColorAttachmentOutput, imageAvailableSemaphore[frameIndex]} }, { renderFinishedSemaphore[frameIndex] }, inFlightFence[frameIndex]);
 }
 
@@ -87,16 +100,15 @@ void Renderer::Destroy()
 {
     vg::currentDevice->WaitUntilIdle();
     swapchain.~Swapchain();
-    surface.~Surface();
 
     framebuffers.clear();
-    depthImage.~Image();
-    depthImageView.~ImageView();
+    depthImage.clear();
+    depthImageView.clear();
     commandBuffer.clear();
     renderFinishedSemaphore.clear();
     imageAvailableSemaphore.clear();
     inFlightFence.clear();
-    renderSystem.~GPUDrivenRendererSystem();
+    renderSystem.clear();
 
     materials.clear();
 }
@@ -104,8 +116,8 @@ void Renderer::Destroy()
 
 vg::Surface Renderer::surface;
 vg::Swapchain Renderer::swapchain;
-vg::Image Renderer::depthImage;
-vg::ImageView Renderer::depthImageView;
+std::vector<vg::Image> Renderer::depthImage;
+std::vector<vg::ImageView> Renderer::depthImageView;
 std::vector<vg::Framebuffer> Renderer::framebuffers;
 int Renderer::frameIndex;
 
@@ -114,7 +126,7 @@ std::vector<vg::Semaphore> Renderer::renderFinishedSemaphore;
 std::vector<vg::Semaphore> Renderer::imageAvailableSemaphore;
 std::vector<vg::Fence> Renderer::inFlightFence;
 
-GPUDrivenRendererSystem Renderer::renderSystem;
+std::vector<GPUDrivenRendererSystem> Renderer::renderSystem;
 
 void* Renderer::window;
 std::vector<Material> Renderer::materials;

@@ -2,7 +2,23 @@
 #include <windows.h>
 #include <assert.h>
 #include <cfloat>
+#include <filesystem>
 #include "Profiler.h"
+
+int GetID()
+{
+    char path[MAX_PATH];
+    GetModuleFileNameA(NULL, path, MAX_PATH);
+
+    int id = 0;
+    int mult = 1;
+    for (int i = 0; path[i] != 0; i++)
+    {
+        id += path[i] * mult;
+        mult *= 32;
+    }
+    return id;
+}
 
 Profiler::Samples::Samples() : totalSum(0.0f), totalMin(FLT_MAX), totalMax(-FLT_MAX), offset(0), totalSampleCount(0), sampleCount(0), sampleLimit(maxSampleCount), currentSample(0) {}
 
@@ -120,7 +136,7 @@ void Profiler::Samples::EndAccumulate()
 
 
 Profiler::Function::Function(const char* name, Profiler::FunctionType type)
-    :name{ 0 }, type(type), programID(GetCurrentProcessId())
+    :name{ 0 }, type(type), programID(GetID())
 {
     strncpy(this->name, name, maxFunctionNameLength);
 }
@@ -200,24 +216,22 @@ Profiler::ScopedFunction::~ScopedFunction()
 
 void Profiler::SetHightPriority()
 {
-    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+    SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS);
 }
 
 void Profiler::BeginFrame()
 {
     isFrameActive = true;
-    int id = GetCurrentProcessId();
+    int id = GetID();
     for (auto&& i : GetFunctions())
-        // if (i.programID == id)
-        i.GetSamples().BeginAccumulate();
+        if (i.programID == id)
+            i.GetSamples().BeginAccumulate();
 }
-
 void Profiler::EndFrame()
 {
     isFrameActive = false;
-    int id = GetCurrentProcessId();
     for (auto&& i : GetFunctions())
-        if (i.programID == id)
+        if (i.programID == GetID())
         {
             i.lastInvocations = i.invocations;
             i.invocations = 0;
@@ -291,9 +305,6 @@ void Profiler::EndFunction(const char* name)
 bool Profiler::HeaderHandle::Create()
 {
     fileHandle = (void*) CreateFileMappingA((HANDLE) -1, NULL, PAGE_READWRITE, 0, sizeof(Profiler::Header), "Profiler/Header");
-    if (!fileHandle)
-        return fileHandle;
-
     header = (Profiler::Header*) (LPTSTR) MapViewOfFile(fileHandle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(Profiler::Header));
     header->functionCount = 0;
 
@@ -303,23 +314,13 @@ bool Profiler::HeaderHandle::Create()
 bool Profiler::HeaderHandle::Open()
 {
     fileHandle = (void*) OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, "Profiler/Header");
-    if (!fileHandle)
-        return fileHandle;
-
     header = (Profiler::Header*) (LPTSTR) MapViewOfFile(fileHandle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(Profiler::Header));
-    int id = GetCurrentProcessId();
-    for (auto&& i : GetFunctions())
-        if (i.programID == -1)
-            i.programID = id;
 
     return fileHandle;
 }
 
 Profiler::HeaderHandle::~HeaderHandle()
 {
-    for (auto&& i : GetFunctions())
-        i.programID = -1;
-
     UnmapViewOfFile(header);
     CloseHandle(fileHandle);
 }
