@@ -180,7 +180,7 @@ int main()
     Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
 
 
-    std::vector<Entity> entities(1024 * 8);
+    std::vector<Entity> entities(1024 * 2);
     Renderer::renderSystem[0].ReserveRenderObjects(entities.size());
     entities[0] = Entity::AddEntity(Transform({ 0,0,0 }, { 3,3,3 }), MeshArray(0, 0, 1));
 

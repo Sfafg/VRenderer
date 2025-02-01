@@ -96,7 +96,7 @@ bool isVisible(RenderObject object)
     for(int i =0; i < 6; i ++)
         if(outsideCounts[i] >= desiredCount)
             return false;
-
+            
     vec4 aabb = vec4(999999,999999,-999999,-999999);
     float boundingDepth = 1;
     for(int i = 0; i < 8; i++)
@@ -129,10 +129,10 @@ void main()
 {
     uint index = gl_GlobalInvocationID.x;
     if(index > objectCount) return;
-    RenderObject object = renderObjects[index];
-    if(isVisible(object))
+
+    if(isVisible(renderObjects[index]))
     {
-        uint instanceIndex = atomicAdd(drawInstructions[object.batchID].instanceCount,1) + drawInstructions[object.batchID].firstInstance;
-        instanceMapping[instanceIndex] = object.objectID;
+        uint instanceIndex = atomicAdd(drawInstructions[renderObjects[index].batchID].instanceCount,1) + drawInstructions[renderObjects[index].batchID].firstInstance;
+        instanceMapping[instanceIndex] = renderObjects[index].objectID;
     }
 }
