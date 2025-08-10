@@ -1,40 +1,121 @@
 #pragma once
-#include <vector>
-#include <memory>
 #include "VG/VG.h"
-#include "VG/Span.h"
-#include "BufferArray.h"
-#include "glm/glm.hpp"
+#include <iostream>
+#include "RenderBuffer.h"
 
-struct VariantData
-{
-    float r;
-    float g;
-    float b;
+/**
+ * @brief Class used to represent a material used for rendering.
+ */
+class Material {
+    friend class Renderer;
+
+    static std::vector<vg::Subpass> subpasses;
+    static std::vector<vg::SubpassDependency> dependecies;
+    static std::vector<RenderBuffer::Region> materialDataRegions;
+    static RenderBuffer materialBuffer;
+    // static vg::Buffer materialBuffer;
+    // static std::vector<int> materialDataSize;
+    // static std::vector<int> materialDataOffset;
+    // static std::vector<int> materialVariants;
+
+    uint16_t index;
+    uint16_t variant;
+
+    // TO DO: Add destructors, move operators.
+    Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize);
+
+  public:
+    struct MaterialCreateInfo {
+        vg::Primitive primitive = vg::Primitive::Triangles;
+        bool primitiveRestart = false;
+        vg::ViewportState viewportState = vg::ViewportState(vg::Viewport(0, 0), vg::Scissor(0, 0));
+        bool depthClamp = false;
+        bool discard = false;
+        vg::PolygonMode polygonMode = vg::PolygonMode::Fill;
+        vg::CullMode cullMode = vg::CullMode::Back;
+        vg::FrontFace frontFace = vg::FrontFace::CounterClockwise;
+        vg::DepthBias depthBias;
+        float lineWidth = 1.0f;
+        bool depthTestEnable = true;
+        bool depthWriteEnable = true;
+        vg::CompareOp depthCompareOp = vg::CompareOp::Less;
+        bool depthBoundsTestEnable = false;
+        bool stencilTestEnable = false;
+        vg::StencilOpState front = {};
+        vg::StencilOpState back = {};
+        float minDepthBounds = 0;
+        float maxDepthBounds = 0;
+        bool enableLogicOp = true;
+        vg::LogicOp logicOp = vg::LogicOp::Copy;
+        uint32_t attachmentCount = 0;
+        std::vector<vg::ColorBlend> attachments = {vg::ColorBlend(
+            vg::BlendFactor::SrcAlpha, vg::BlendFactor::OneMinusSrcAlpha, vg::BlendOp::Add, vg::BlendFactor::One,
+            vg::BlendFactor::Zero, vg::BlendOp::Add, vg::ColorComponent::RGBA
+        )};
+        float blendConsts[4] = {0, 0, 0, 0};
+        std::vector<vg::DynamicState> dynamicState = {vg::DynamicState::Viewport, vg::DynamicState::Scissor};
+        std::vector<vg::AttachmentReference> colorAttachments = {
+            vg::AttachmentReference(0, vg::ImageLayout::ColorAttachmentOptimal)};
+    };
+
+  public:
+    Material(
+        const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+        vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
+        vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
+        const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
+        uint32_t childrenCount, vg::SubpassDependency &&dependency, const void *materialData = nullptr, int byteSize = 0
+    );
+
+    Material(
+        const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+        MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const void *materialData = nullptr,
+        int byteSize = 0
+    );
+
+    Material(Material *parentMaterial, const void *materialData = nullptr, int byteSize = 0);
+
+    template <typename T>
+    Material(
+        const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+        vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
+        vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
+        const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
+        uint32_t childrenCount, vg::SubpassDependency &&dependency, const T &materialData
+    );
+
+    template <typename T>
+    Material(
+        const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+        MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const T &materialData
+    );
+
+    template <typename T> Material(Material *material, const T &materialData);
 };
+template <typename T>
+Material::Material(
+    const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+    MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const T &materialData
+)
+    : Material(
+          vertexShaderPath, fragmentShaderPath, std::move(vertexInput), std::move(createInfo), std::move(dependency),
+          &materialData, sizeof(T)
+      ) {}
 
-struct Material
-{
-    std::unique_ptr<std::vector<vg::Shader*>> shaders;
-    std::unique_ptr<vg::InputAssembly> inputAssembly;
-    std::unique_ptr<vg::Rasterizer> rasterizer;
-    std::unique_ptr<vg::Multisampling> multisampling;
-    std::unique_ptr<vg::DepthStencil> depthStencil;
-    std::unique_ptr<vg::ColorBlending> colorBlending;
-    std::unique_ptr<std::vector<vg::DynamicState>> dynamicStates;
-    BufferArray<VariantData> variants;
+template <typename T>
+Material::Material(
+    const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+    vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
+    vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
+    const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
+    uint32_t childrenCount, vg::SubpassDependency &&dependency, const T &materialData
+)
+    : Material(
+          vertexShaderPath, fragmentShaderPath, std::move(vertexInput), std::move(inputAssembly),
+          std::move(viewportState), std::move(rasterizer), std::move(depthStencil), std::move(colorBlending),
+          std::move(dynamicState), std::move(colorAttachments), childrenCount, std::move(dependency), &materialData,
+          sizeof(T)
+      ) {}
 
-    Material() {}
-    Material(Span<vg::Shader* const> shaders, vg::InputAssembly&& inputAssembly, vg::Rasterizer&& rasterizer, vg::Multisampling&& multisampling, vg::DepthStencil&& depthStencil, vg::ColorBlending&& colorBlending, Span<const vg::DynamicState> dynamicStates)
-        :
-        shaders(new std::vector<vg::Shader*>(shaders.begin(), shaders.end())), inputAssembly(new auto(inputAssembly)),
-        rasterizer(new auto(rasterizer)), multisampling(new auto(multisampling)), depthStencil(new auto(depthStencil)),
-        colorBlending(new auto(colorBlending)), dynamicStates(new std::vector<vg::DynamicState>(dynamicStates.begin(), dynamicStates.end())),
-        variants(BufferArray<VariantData>(0, vg::BufferUsage::StorageBuffer))
-    {}
-
-    void AddVariant(VariantData&& variant)
-    {
-        variants.push_back(std::move(variant));
-    }
-};
+template <typename T>
+Material::Material(Material *material, const T &materialData) : Material(material, &materialData, sizeof(T)) {}

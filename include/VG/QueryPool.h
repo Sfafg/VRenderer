@@ -30,14 +30,14 @@ namespace vg
 
             return results;
         }
-        // template<typename... T>
-        // std::tuple<T...> GetResults(int queryCount, int firstQuery = 0, Flags<QueryResult> resultFlags = {}, uint32_t writeByteOffset = 0)
-        // {
-        //     std::tuple<T...> results;
-        //     GetResults(queryCount, firstQuery, ((char*) &results) + writeByteOffset, sizeof(results), sizeof(std::get<0>(results)), resultFlags);
+        template<typename... T>
+        std::tuple<T...> GetResults(int queryCount, int firstQuery = 0, Flags<QueryResult> resultFlags = {}, uint32_t writeByteOffset = 0)
+        {
+            std::tuple<T...> results;
+            GetResults(queryCount, firstQuery, ((char*) &results) + writeByteOffset, sizeof(results), sizeof(std::get<0>(results)), resultFlags);
 
-        //     return results;
-        // }
+            return results;
+        }
     private:
         QueryPoolHandle m_handle;
     };

@@ -1,85 +1,108 @@
 #include "Mesh.h"
 
-Mesh::Mesh() : materialID(0) {}
+Mesh::Mesh(int vertexCount, int vertexByteSize, void *vertexData, int indexCount, int indexByteSize, void *indexData)
+    : index(meshDataBuffer.GetSize() / sizeof(MeshMetaData)) {
 
-Mesh::Mesh(Span<const uint64_t> attributesSize, uint32_t materialID)
-    : materialID(materialID)
-{
-    for (auto&& size : attributesSize)
-        attributes.push_back(vg::Buffer(size, { vg::BufferUsage::TransferSrc, vg::BufferUsage::TransferDst,vg::BufferUsage::VertexBuffer }));
-
-    if (attributes.size() != 0)
-        vg::Allocate(attributes, { vg::MemoryProperty::DeviceLocal });
-}
-
-Mesh::Mesh(vg::IndexType indexType, uint32_t triangleCount, Span<const uint64_t> attributesSize, uint32_t materialID)
-    :indexType(indexType), materialID(materialID)
-{
-    uint64_t triangleBufferSize = triangleCount;
-    switch (indexType)
+    // MeshDataBuffer growth.
     {
-    case vg::IndexType::Uint8:break;
-    case vg::IndexType::Uint16:triangleBufferSize *= 2; break;
-    case vg::IndexType::Uint32:triangleBufferSize *= 4; break;
-    default:break;
+        vg::Buffer staging(sizeof(MeshMetaData), vg::BufferUsage::TransferSrc);
+        vg::Allocate(staging, vg::MemoryProperty::HostVisible);
+
+        MeshMetaData &meshData = *(MeshMetaData *)staging.MapMemory();
+        meshData.firstIndex = (combinedBuffer.GetSize() - vertexBufferSize) / indexByteSize;
+        meshData.indexCount = indexCount;
+        meshData.vertexOffset = std::ceil(vertexBufferSize / (float)vertexByteSize);
+
+        vg::Buffer newBuffer(
+            meshDataBuffer.GetSize() + staging.GetSize(),
+            {vg::BufferUsage::TransferDst, vg::BufferUsage::TransferSrc, vg::BufferUsage::StorageBuffer}
+        );
+        vg::Allocate(newBuffer, vg::MemoryProperty::DeviceLocal);
+
+        vg::CmdBuffer cmd(vg::currentDevice->GetQueue(0));
+        cmd.Begin();
+        if (meshDataBuffer.GetSize() != 0)
+            cmd.Append(vg::cmd::CopyBuffer(meshDataBuffer, newBuffer, {{meshDataBuffer.GetSize()}}));
+
+        cmd.Append(vg::cmd::CopyBuffer(staging, newBuffer, {{staging.GetSize(), 0, meshDataBuffer.GetSize()}}))
+            .End()
+            .Submit()
+            .Await();
+
+        std::swap(meshDataBuffer, newBuffer);
     }
-    triangleBuffer = vg::Buffer(triangleBufferSize, { vg::BufferUsage::TransferSrc, vg::BufferUsage::TransferDst,vg::BufferUsage::IndexBuffer });
-    vg::Allocate(triangleBuffer, { vg::MemoryProperty::DeviceLocal });
+    // CombinedBuffer growth.
+    {
+        vg::Buffer staging(vertexByteSize * vertexCount + indexByteSize * indexCount, vg::BufferUsage::TransferSrc);
 
-    for (auto&& size : attributesSize)
-        attributes.push_back(vg::Buffer(size, { vg::BufferUsage::TransferSrc, vg::BufferUsage::TransferDst,vg::BufferUsage::VertexBuffer }));
+        vg::Allocate(staging, vg::MemoryProperty::HostVisible);
+        memcpy(staging.MapMemory(), vertexData, vertexByteSize * vertexCount);
+        memcpy(staging.MapMemory() + vertexByteSize * vertexCount, indexData, indexByteSize * indexCount);
 
-    if (attributes.size() != 0)
-        vg::Allocate(attributes, { vg::MemoryProperty::DeviceLocal });
+        int vertexPadding = std::ceil(vertexBufferSize / (float)vertexByteSize) * vertexByteSize - vertexBufferSize;
+
+        vg::Buffer newBuffer(
+            combinedBuffer.GetSize() + staging.GetSize() + vertexPadding,
+            {vg::BufferUsage::TransferDst, vg::BufferUsage::TransferSrc, vg::BufferUsage::VertexBuffer,
+             vg::BufferUsage::IndexBuffer}
+        );
+        vg::Allocate(newBuffer, vg::MemoryProperty::DeviceLocal);
+
+        uint64_t newVertexBufferSize = vertexBufferSize + vertexByteSize * vertexCount + vertexPadding;
+
+        vg::CmdBuffer cmd(vg::currentDevice->GetQueue(0));
+        cmd.Begin();
+        if (combinedBuffer.GetSize() != 0)
+            cmd.Append(vg::cmd::CopyBuffer(
+                combinedBuffer, newBuffer,
+                {{vertexBufferSize},
+                 {combinedBuffer.GetSize() - vertexBufferSize, vertexBufferSize, newVertexBufferSize}}
+            ));
+
+        cmd
+            .Append(vg::cmd::CopyBuffer(
+                staging, newBuffer,
+                {{(uint64_t)(vertexByteSize * vertexCount), 0, newVertexBufferSize - (vertexByteSize * vertexCount)},
+                 {(uint64_t)(indexByteSize * indexCount), (uint64_t)(vertexByteSize * vertexCount),
+                  newBuffer.GetSize() - (indexByteSize * indexCount)}}
+            ))
+            .End()
+            .Submit()
+            .Await();
+
+        std::swap(combinedBuffer, newBuffer);
+        vertexBufferSize = newVertexBufferSize;
+    }
 }
 
+Mesh::Mesh() : index(-1) {}
 
-void Mesh::WriteTriangles(void* data, uint64_t size, uint64_t offset)
-{
-    vg::Buffer stagingBuffer(size, { vg::BufferUsage::TransferSrc });
-    vg::Allocate(stagingBuffer, { vg::MemoryProperty::HostVisible });
-    memcpy(stagingBuffer.MapMemory(), data, size);
+Mesh::~Mesh() {
+    if (index >= meshDataBuffer.GetSize() / sizeof(MeshMetaData)) return;
 
-    vg::CmdBuffer(vg::currentDevice->GetQueue(0)).Begin().Append(
-        vg::cmd::CopyBuffer(stagingBuffer, triangleBuffer, { vg::BufferCopyRegion(size,0,offset) })
-    ).End().Submit().Await();
+    if (index == 0) {
+        combinedBuffer.~Buffer();
+        meshDataBuffer.~Buffer();
+    }
 }
 
-void Mesh::ReadTriangles(void*& data, uint64_t size, uint64_t offset)
-{
-    size = std::min(size, triangleBuffer.GetSize() - offset);
+Mesh::MeshMetaData Mesh::GetMeshMetaData() const {
+    if (index >= meshDataBuffer.GetSize() / sizeof(MeshMetaData)) return MeshMetaData();
 
-    vg::Buffer stagingBuffer(size, { vg::BufferUsage::TransferDst });
-    vg::Allocate(stagingBuffer, { vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent });
-    vg::CmdBuffer(vg::currentDevice->GetQueue(0)).Begin().Append(
-        vg::cmd::CopyBuffer(triangleBuffer, stagingBuffer, { vg::BufferCopyRegion(size,offset,0) })
-    ).End().Submit().Await();
+    vg::Buffer read(sizeof(MeshMetaData), vg::BufferUsage::TransferDst);
+    vg::Allocate(read, vg::MemoryProperty::HostVisible);
 
-    data = malloc(size);
-    memcpy(data, stagingBuffer.MapMemory(), size);
+    vg::CmdBuffer(vg::currentDevice->GetQueue(0))
+        .Begin()
+        .Append(vg::cmd::CopyBuffer(meshDataBuffer, read, {{read.GetSize(), index * sizeof(MeshMetaData), 0}}))
+        .End()
+        .Submit()
+        .Await();
+
+    MeshMetaData meshData = *(MeshMetaData *)read.MapMemory();
+    return meshData;
 }
 
-void Mesh::WriteAttribute(uint32_t attributeIndex, void* data, uint64_t size, uint64_t offset)
-{
-    vg::Buffer stagingBuffer(size, { vg::BufferUsage::TransferSrc });
-    vg::Allocate(stagingBuffer, { vg::MemoryProperty::HostVisible });
-    memcpy(stagingBuffer.MapMemory(), data, size);
-
-    vg::CmdBuffer(vg::currentDevice->GetQueue(0)).Begin().Append(
-        vg::cmd::CopyBuffer(stagingBuffer, attributes[attributeIndex], { vg::BufferCopyRegion(size,0,offset) })
-    ).End().Submit().Await();
-}
-
-void Mesh::ReadAttribute(uint32_t attributeIndex, void*& data, uint64_t size, uint64_t offset)
-{
-    size = std::min(size, attributes[attributeIndex].GetSize() - offset);
-
-    vg::Buffer stagingBuffer(size, { vg::BufferUsage::TransferDst });
-    vg::Allocate(stagingBuffer, { vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent });
-    vg::CmdBuffer(vg::currentDevice->GetQueue(0)).Begin().Append(
-        vg::cmd::CopyBuffer(attributes[attributeIndex], stagingBuffer, { vg::BufferCopyRegion(size,offset,0) })
-    ).End().Submit().Await();
-
-    data = malloc(size);
-    memcpy(data, stagingBuffer.MapMemory(), size);
-}
+vg::Buffer Mesh::combinedBuffer;
+vg::Buffer Mesh::meshDataBuffer;
+uint64_t Mesh::vertexBufferSize = 0;

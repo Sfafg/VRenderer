@@ -1,275 +1,169 @@
+#include "glm/ext/quaternion_trigonometric.hpp"
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <GLFW/glfw3.h>
-#include <iostream>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 #define GLM_ENABLE_EXPERIMENTAL
+#include "Renderer.h"
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <math.h>
-#include "VG/VG.h"
-#include "ECS.h"
-#include "Renderer.h"
-#include "Profiler/Profiler.h"
-#include "ObjLoader.h"
-#include "Settings.h"
-using namespace ECS;
-using namespace std::chrono_literals;
-std::tuple<std::vector<glm::vec3>, std::vector<glm::vec3>, std::vector<glm::vec2>, std::vector<uint32_t>> GenerateSphereMesh()
-{
-    std::vector<glm::vec3> vertices;
-    std::vector<glm::vec3> normals;
-    std::vector<glm::vec2> uvs;
-    std::vector<uint32_t> indices;
 
-    const int resolution = 14;
-    for (int inclination = 0; inclination <= resolution; inclination++)
-    {
-        for (int azimuth = 0; azimuth < resolution * 2; azimuth++)
-        {
-            float a = inclination / (float) resolution * glm::pi<float>();
-            float b = azimuth / (float) resolution * glm::pi<float>();
+float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (max - min) + min; }
 
-            glm::vec3 p;
-            p.x = sin(a) * cos(b);
-            p.y = sin(a) * sin(b);
-            p.z = cos(a);
-            vertices.push_back(p);
-            normals.push_back(p);
-            uvs.push_back({ 0,0 });
-        }
-    }
-
-    for (int i = 0; i < resolution; i++)
-    {
-        for (int j = 0; j < resolution * 2; j++)
-        {
-            indices.push_back(i * resolution * 2 + j);
-            indices.push_back(i * resolution * 2 + j + 1);
-            indices.push_back((i + 1) * resolution * 2 + j);
-
-            indices.push_back(i * resolution * 2 + j + 1);
-            indices.push_back((i + 1) * resolution * 2 + j + 1);
-            indices.push_back((i + 1) * resolution * 2 + j);
-        }
-    }
-
-    return { vertices, normals,uvs,indices };
-}
-std::tuple<std::vector<glm::vec3>, std::vector<glm::vec3>, std::vector<glm::vec2>, std::vector<uint32_t>> GenerateBoxMesh()
-{
-    std::vector<glm::vec3> vertices = {
-        glm::vec3(-0.5,-0.5,-0.5),
-        glm::vec3(-0.5,-0.5, 0.5),
-        glm::vec3(-0.5, 0.5,-0.5),
-        glm::vec3(-0.5, 0.5, 0.5),
-        glm::vec3(0.5,-0.5,-0.5),
-        glm::vec3(0.5,-0.5, 0.5),
-        glm::vec3(0.5, 0.5,-0.5),
-        glm::vec3(0.5, 0.5, 0.5),
-    };
-    std::vector<glm::vec3> normals = {
-        glm::normalize(glm::vec3(-0.5,-0.5,-0.5)),
-        glm::normalize(glm::vec3(-0.5,-0.5, 0.5)),
-        glm::normalize(glm::vec3(-0.5, 0.5,-0.5)),
-        glm::normalize(glm::vec3(-0.5, 0.5, 0.5)),
-        glm::normalize(glm::vec3(0.5,-0.5,-0.5)),
-        glm::normalize(glm::vec3(0.5,-0.5, 0.5)),
-        glm::normalize(glm::vec3(0.5, 0.5,-0.5)),
-        glm::normalize(glm::vec3(0.5, 0.5, 0.5)),
-    };
-    std::vector<glm::vec2> uvs = {
-        glm::vec2(0,0),
-        glm::vec2(0,0),
-        glm::vec2(0,0),
-        glm::vec2(0,0),
-        glm::vec2(0,0),
-        glm::vec2(0,0),
-        glm::vec2(0,0),
-        glm::vec2(0,0),
-    };
-    std::vector<uint32_t> indices = {
-        2,1,0, 1,2,3,
-        5,4,0, 0,1,5,
-        2,6,7, 7,3,2,
-
-    };
-
-    return { vertices, normals,uvs,indices };
-}
-glm::quat fromTo(glm::vec3 a, glm::vec3 b)
-{
-    a = glm::normalize(a);
-    b = glm::normalize(b);
-
-    glm::vec3 rotationAxis = glm::cross(a, b);
-    float dotProduct = glm::dot(a, b);
-
-    if (dotProduct >= 1.0f)
-        return a;
-
-    float angle = acos(dotProduct);
-
-    return glm::angleAxis(angle, glm::normalize(rotationAxis));
-}
-int main()
-{
-    Profiler::SetHightPriority();
+GLFWwindow *CreateWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    GLFWwindow* window = glfwCreateWindow(1920, 1080, "VRendererTest", nullptr, nullptr);
-    int w, h; glfwGetFramebufferSize(window, &w, &h);
+    // glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+    return glfwCreateWindow(1920, 1080, "VRendererTest", nullptr, nullptr);
+}
+vg::Queue generalQueue;
+vg::Device renderDevice;
+vg::SurfaceHandle InitVulkan(GLFWwindow *window) {
+    vg::instance =
+        vg::Instance({"VK_KHR_surface", "VK_KHR_win32_surface"}, [](vg::MessageSeverity severity, const char *message) {
+            if (severity < vg::MessageSeverity::Warning) return;
+            std::cout << message << '\n';
+            // std::string m(message);
+            // m = m.substr(m.find('[') + 2, m.size());
+            // std::string brackets = m.substr(0, m.find(']') - 1);
+            // m = m.substr(brackets.size(), m.size());
+            // m = m.substr(m.find(',') + 1, m.size());
+            // std::string type = m.substr(0, m.find(';'));
+            // m = m.substr(type.size() + 3, m.size());
+            // m = m.substr(m.find('|') + 1, m.size());
+            // m = m.substr(0, m.rfind('('));
+            // std::string me = m.substr(0, m.rfind('.'));
+            // m = m.substr(m.rfind(':') + 1, m.size());
 
-    vg::instance = vg::Instance({ "VK_KHR_surface", "VK_KHR_win32_surface" },
-        [](vg::MessageSeverity severity, const char* message) {
-            if (severity >= vg::MessageSeverity::Warning)
-                std::cout << message << "\n\n";
+            // std::cout << type << me << '.' << m << '\n';
         });
 
     vg::SurfaceHandle windowSurface = vg::Window::CreateWindowSurface(vg::instance, window);
-    vg::DeviceFeatures deviceFeatures({ vg::Feature::LogicOp,vg::Feature::SampleRateShading, vg::Feature::FillModeNonSolid , vg::Feature::MultiDrawIndirect });
-    vg::Queue generalQueue({ vg::QueueType::General }, 1.0f);
-    vg::Device rendererDevice({ &generalQueue }, { "VK_KHR_swapchain","VK_EXT_sampler_filter_minmax" }, deviceFeatures, windowSurface,
-        [](auto id, auto supportedQueues, auto supportedExtensions, auto type, vg::DeviceLimits limits, vg::DeviceFeatures features) {
-            return (type == vg::DeviceType::Dedicated);
-        });
-    vg::currentDevice = &rendererDevice;
+    vg::DeviceFeatures deviceFeatures(
+        {vg::Feature::LogicOp, vg::Feature::SampleRateShading, vg::Feature::FillModeNonSolid,
+         vg::Feature::MultiDrawIndirect}
+    );
+    generalQueue = vg::Queue({vg::QueueType::General}, 1.0f);
+    renderDevice = vg::Device(
+        {&generalQueue}, {"VK_KHR_swapchain", "VK_EXT_sampler_filter_minmax"}, deviceFeatures, windowSurface,
+        [](auto id, auto supportedQueues, auto supportedExtensions, auto type, vg::DeviceLimits limits,
+           vg::DeviceFeatures features) { return (type == vg::DeviceType::Dedicated); }
+    );
+    vg::currentDevice = &renderDevice;
+    return windowSurface;
+}
 
-    vg::Shader vertexShader(vg::ShaderStage::Vertex, "resources/shaders/shader.vert.spv");
-    vg::Shader fragmentShader(vg::ShaderStage::Fragment, "resources/shaders/shader.frag.spv");
-    Renderer::materials.emplace_back(
-        Material(
-            std::vector<vg::Shader*>{ &vertexShader, & fragmentShader },
-            vg::InputAssembly(vg::Primitive::Triangles, false),
-            vg::Rasterizer(false, false, vg::PolygonMode::Fill, vg::CullMode::Back, vg::FrontFace::Clockwise),
-            vg::Multisampling(1, false),
-            vg::DepthStencil(true, true, vg::CompareOp::Less),
-            vg::ColorBlending(true, vg::LogicOp::Copy, { 0,0,0,0 }, { vg::ColorBlend() }),
-            { vg::DynamicState::Viewport, vg::DynamicState::Scissor }
-        ));
-    Renderer::materials[0].AddVariant(VariantData{ 1.0f, 0.45f, 0.0f });
-    Renderer::materials[0].AddVariant(VariantData{ 0.0f, 1.0f, 0.2f });
-    Renderer::materials[0].AddVariant(VariantData{ 0.0f, 0.0f, 1.0f });
+int main() {
+    auto window = CreateWindow();
+    int w, h;
+    glfwGetFramebufferSize(window, &w, &h);
 
-    Renderer::Init(window, windowSurface, w, h);
-    {
-        auto [vertices, normals, uvs, triangles] = GenerateSphereMesh();
-        Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
+    auto windowSurface = InitVulkan(window);
+
+    Material mat1(
+        "resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv",
+        vg::VertexLayout(
+            {vg::VertexBinding(0, sizeof(float) * 2), vg::VertexBinding(1, sizeof(glm::mat4), vg::InputRate::Instance)},
+            {vg::VertexAttribute(0, 0, vg::Format::RG32SFLOAT), vg::VertexAttribute(1, 1, vg::Format::RGBA32SFLOAT),
+             vg::VertexAttribute(2, 1, vg::Format::RGBA32SFLOAT, sizeof(glm::vec4)),
+             vg::VertexAttribute(3, 1, vg::Format::RGBA32SFLOAT, sizeof(glm::vec4) * 2),
+             vg::VertexAttribute(4, 1, vg::Format::RGBA32SFLOAT, sizeof(glm::vec4) * 3)}
+        ),
+        {.cullMode = vg::CullMode::None},
+        vg::SubpassDependency(
+            -1, 0, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
+            vg::Access::ColorAttachmentWrite, {}
+        ),
+        0.2f
+    );
+    Material mat2(
+        "resources/shaders/shader1.vert.spv", "resources/shaders/shader1.frag.spv",
+        vg::VertexLayout(
+            {vg::VertexBinding(0, sizeof(float) * 5)},
+            {{0, 0, vg::Format::RG32SFLOAT}, {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 2}}
+        ),
+        {.cullMode = vg::CullMode::None},
+        vg::SubpassDependency(
+            0, 1, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
+            vg::Access::ColorAttachmentWrite, {}
+        ),
+        glm::vec4(-0.5, 0.5, 0.3, 0.3)
+    );
+    Material mat3(&mat1, 0.6f);
+    Material mat4(&mat2, glm::vec4(0.5, 0.5, 0.2, 0.3));
+
+    Renderer::Init(window, &generalQueue, windowSurface, w, h);
+
+    Mesh testMesh(4, new glm::vec2[]{{0, 0}, {1, 0}, {1, 1}, {0, 1}}, 6, new int[]{0, 1, 2, 2, 3, 0});
+    Mesh testMesh2(4, new glm::vec2[]{{0, 0}, {0.5, 0}, {1, 1}, {0, 1}}, 6, new int[]{0, 1, 2, 2, 3, 0});
+    Mesh testMesh1(
+        4, sizeof(float) * 5, new float[]{-1, -1, 1, 1, 1, 0, -1, 1, 1, 0, 0, 0, 0, 1, 1, -1, 0, 1, 0, 1}, 6,
+        sizeof(int), new int[]{0, 1, 2, 2, 3, 0}
+    );
+
+    glm::dvec2 lastMouseP;
+    glfwGetCursorPos(window, &lastMouseP.x, &lastMouseP.y);
+    glm::vec3 cameraPos(0, 0, 0.1f);
+    glm::quat cameraRotation(1, 0, 0, 0);
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f), w / (float)h, 0.01f, 100.0f);
+    // proj[1][1] *= -1;
+
+    vg::Buffer instanceBuffer(sizeof(glm::mat4) * 1000, vg::BufferUsage::VertexBuffer);
+    vg::Allocate(instanceBuffer, vg::MemoryProperty::HostVisible);
+    glm::mat4 *instanceData = (glm::mat4 *)instanceBuffer.MapMemory();
+    for (int i = 0; i < 1000; i++) {
+        instanceData[i] = glm::translate(
+            glm::rotate(glm::mat4(1), randf(0, 100), glm::vec3(randf(), randf(), randf())),
+            glm::vec3(randf(-10, 10), randf(-10, 10), randf(-10, 10))
+        );
     }
-    std::vector<glm::vec3> vertices, normals;
-    std::vector<glm::vec2> uvs;
-    std::vector<uint32_t> triangles;
 
-    LoadMesh("resources/Monkey.obj", &vertices, &normals, &triangles);
-    uvs.resize(vertices.size());
-    Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
-    vertices.clear();
-    normals.clear();
-    uvs.clear();
-    LoadMesh("resources/Box.obj", &vertices, &normals, &triangles);
-    uvs.resize(vertices.size());
-    Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
 
-    vertices.clear();
-    normals.clear();
-    uvs.clear();
-    LoadMesh("resources/Bottle.obj", &vertices, &normals, &triangles);
-    uvs.resize(vertices.size());
-    Renderer::renderSystem[0].AddMesh(triangles, vertices, normals, uvs);
-
-
-    std::vector<Entity> entities(1024 * 2);
-    Renderer::renderSystem[0].ReserveRenderObjects(entities.size());
-    entities[0] = Entity::AddEntity(Transform({ 0,0,0 }, { 3,3,3 }), MeshArray(0, 0, 1));
-
-    for (int j = 1; j < entities.size(); j++)
-    {
-        auto&& i = entities[j];
-        auto rFloat = [](float min, float max) {return rand() / float(RAND_MAX) * (max - min) + min; };
-        glm::vec3 pos(rFloat(-50, 50), rFloat(-50, 50), rFloat(-50, 50));
-        glm::vec3 scale(rFloat(1.5, 3), rFloat(1.5, 3), rFloat(1.5, 3));
-        glm::vec3 axis(rFloat(-1, 1), rFloat(-1, 1), rFloat(-1, 1));
-        float angle = rFloat(0, 360);
-        axis = glm::normalize(axis);
-        int variant = rand() % 3;
-        int mesh = rand() % 3;
-        i = Entity::AddEntity(Transform(pos, scale, glm::rotate(glm::quat(1, 0, 0, 0), angle, axis)), MeshArray(0, variant, mesh));
-    }
-
-    Transform cameraTransform({ 0,-8,0 });
-    static float fov = glm::radians(70.0f);
-    glfwSetScrollCallback(window, [](GLFWwindow* window, double scrollx, double scrolly)
         {
-            fov = fov - glm::radians((float) pow(scrolly, 3));
-            if (fov < glm::radians(0.0f)) fov = glm::radians(0.0f);
-            if (fov > glm::radians(180.0f)) fov = glm::radians(180.0f);
-        });
-    glm::vec<2, double> lastMousePos;
-    glfwGetCursorPos(window, &lastMousePos.x, &lastMousePos.y);
-
-    bool enterReleased = true;
-    while (!glfwWindowShouldClose(window))
-    {
-        Profiler::BeginFrame();
-        {
-            PROFILE_NAMED_FUNCTION("Frame Total");
-            glfwPollEvents();
-            if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
-
-            if (glfwGetKey(window, GLFW_KEY_ENTER))
-            {
-                if (enterReleased)
-                {
-                    enterReleased = false;
-                    Settings::stopCameraOcclusionUpdate = !Settings::stopCameraOcclusionUpdate;
-                }
-            }
-            else
-                enterReleased = true;
-
-            {
-                glm::vec<2, double> mousePos;
-                glfwGetCursorPos(window, &mousePos.x, &mousePos.y);
-                auto mouseDelta = (lastMousePos - mousePos) * 0.002 * (double) fov;
-                lastMousePos = mousePos;
-
-                if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1))
-                {
-                    auto rotation = glm::rotate(cameraTransform.rotation, (float) mouseDelta.x, { 0,0,1 });
-                    cameraTransform.rotation = glm::rotate(rotation, (float) mouseDelta.y, { 1,0,0 });
-                }
-
-                float speed = 0.4f;
-                if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT))
-                    speed *= 0.2;
-                if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL))
-                    speed *= 3;
-
-                if (glfwGetKey(window, GLFW_KEY_W))
-                    cameraTransform.position += cameraTransform.Forward() * speed;
-
-                if (glfwGetKey(window, GLFW_KEY_S))
-                    cameraTransform.position -= cameraTransform.Forward() * speed;
-
-                if (glfwGetKey(window, GLFW_KEY_D))
-                    cameraTransform.position += cameraTransform.Right() * speed;
-
-                if (glfwGetKey(window, GLFW_KEY_A))
-                    cameraTransform.position -= cameraTransform.Right() * speed;
-
-                if (glfwGetKey(window, GLFW_KEY_E))
-                    cameraTransform.position += cameraTransform.Up() * speed;
-
-                if (glfwGetKey(window, GLFW_KEY_Q))
-                    cameraTransform.position -= cameraTransform.Up() * speed;
+            glm::dvec2 mouseP;
+            glfwGetCursorPos(window, &mouseP.x, &mouseP.y);
+            glm::dvec2 mouseDelta = mouseP - lastMouseP;
+            lastMouseP = mouseP;
+            mouseDelta *= 0.001f;
+            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1)) {
+                cameraRotation =
+                    glm::angleAxis((float)-mouseDelta.x, cameraRotation * glm::vec3(0, 0, 1)) * cameraRotation;
+                cameraRotation =
+                    glm::angleAxis((float)mouseDelta.y, cameraRotation * glm::vec3(1, 0, 0)) * cameraRotation;
+                cameraRotation = glm::normalize(cameraRotation);
             }
 
-            Renderer::DrawFrame(cameraTransform, fov);
-            Renderer::Present(generalQueue);
+            glm::vec3 direction(0.0f);
+
+            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) direction += glm::vec3(0, 0, -1);
+            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) direction += glm::vec3(0, 0, 1);
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) direction += glm::vec3(-1, 0, 0);
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) direction += glm::vec3(1, 0, 0);
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) direction += glm::vec3(0, -1, 0);
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
+
+            if (length(direction) > 0.0f) direction = normalize(direction);
+
+            cameraPos += cameraRotation * direction * 0.01f;
         }
-        Profiler::EndFrame();
+
+        glm::mat4 view = glm::lookAt(
+            cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
+        );
+        Renderer::SetPassData({.viewProjection = proj * view});
+        Renderer::StartFrame();
+        Renderer::Draw(testMesh, mat1, instanceBuffer, 1000);
+        Renderer::Draw(testMesh2, mat3, instanceBuffer, 1000);
+        Renderer::Draw(testMesh2, mat4);
+        Renderer::Draw(testMesh1, mat2);
+        Renderer::EndFrame();
+        Renderer::Present(generalQueue);
     }
     Renderer::Destroy();
     glfwTerminate();

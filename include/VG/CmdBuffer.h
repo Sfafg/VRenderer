@@ -736,7 +736,7 @@ namespace vg
          * @tparam T class derived from cmd::Command
          * @param commands Array of commands from cmd:: namespace
          */
-        template<typename... T>
+        template<Commands... T>
         CmdBuffer& Append(const T&... commands) { (..., _Append(std::move(commands))); return *this; }
 
         /**

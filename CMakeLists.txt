@@ -12,31 +12,28 @@ set(SHADER_ROOT "${SRC_ROOT}/shaders")
 set(SHADER_OUTPUT_DIR "${RESOURCES_OUTPUT_DIR}/shaders")
 
 set(CMAKE_EXE_LINKER_FLAGS "-static")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(ShowConsole FALSE)
 
 set(SRC
-    ${SRC_ROOT}/Components.cpp
-    ${SRC_ROOT}/GPUDrivenRendererSystem.cpp
-    ${SRC_ROOT}/DepthPyramid.cpp
-    ${SRC_ROOT}/Mesh.cpp
-    ${SRC_ROOT}/ObjLoader.cpp
     ${SRC_ROOT}/Renderer.cpp
-    include/Profiler/Profiler.cpp
+    ${SRC_ROOT}/Material.cpp
+    ${SRC_ROOT}/Mesh.cpp
 )
 
 set(SHADERS
     ${SHADER_ROOT}/Renderer.comp
     ${SHADER_ROOT}/ClearInstructions.comp
     ${SHADER_ROOT}/Reduction.comp
-    ${SHADER_ROOT}/shader.frag
     ${SHADER_ROOT}/shader.vert
+    ${SHADER_ROOT}/shader.frag
+    ${SHADER_ROOT}/shader1.vert
+    ${SHADER_ROOT}/shader1.frag
     ${SHADER_ROOT}/passthrough.vert
 )
 
 set(RESOURCES
-    ${RESOURCES_ROOT}/Box.obj
-    ${RESOURCES_ROOT}/Monkey.obj
-    ${RESOURCES_ROOT}/Bottle.obj
+    # ${RESOURCES_ROOT}/Bottle.obj
 )
 
 file(MAKE_DIRECTORY ${TESTS_ROOT} ${SRC_ROOT} ${RESOURCES_ROOT} ${RESOURCES_OUTPUT_DIR} ${SHADER_ROOT} ${SHADER_OUTPUT_DIR})
@@ -70,22 +67,31 @@ endforeach()
 add_custom_target(Resources ALL DEPENDS ${RESOURCE_DEPEND})
 
 # VRenderer
-# if(ShowConsole)
-# set(CMAKE_CXX_FLAGS "-mwindows")
-# add_compile_definitions(MAIN=WinMain)
-# endif()
+if(ShowConsole)
+    set(CMAKE_CXX_FLAGS "-mwindows")
+    add_compile_definitions(MAIN=WinMain)
+endif()
 
-# if(NOT ShowConsole)
-# add_compile_definitions(MAIN=main)
-# endif()
+if(NOT ShowConsole)
+    add_compile_definitions(MAIN=main)
+endif()
+
 add_executable(VRenderer ${SRC} ${TESTS_ROOT}/Source.cpp)
 
+# include(FetchContent)
+# FetchContent_Declare(
+#     ECS
+#     GIT_REPOSITORY https://github.com/Sfafg/ECS.git
+#     GIT_TAG main
+# )
+# FetchContent_MakeAvailable(ECS)
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_link_libraries(VRenderer PRIVATE VGraphics-d glfw3)
+    target_link_libraries(VRenderer PRIVATE VGraphics-d glfw3 )
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_link_libraries(VRenderer PRIVATE VGraphics glfw3)
+    target_link_libraries(VRenderer PRIVATE VGraphics glfw3 )
 endif()
 
 target_precompile_headers(VRenderer PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/VG/VG.h")
@@ -93,6 +99,7 @@ target_precompile_headers(VRenderer PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/
 target_include_directories(VRenderer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    # "${ECS_SOURCE_DIR}/src"
 )
 target_link_directories(VRenderer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/lib/"

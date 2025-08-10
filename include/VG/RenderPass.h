@@ -5,42 +5,46 @@
 #include "PipelineCache.h"
 #include "Span.h"
 
-namespace vg
-{
+namespace vg {
+/**
+ *@brief Specifies render process
+ * Configures whole render process by defining attachments, subpasses, fixed function parameters, shaders
+ */
+class RenderPass {
+  public:
     /**
-     *@brief Specifies render process
-     * Configures whole render process by defining attachments, subpasses, fixed function parameters, shaders
+     *@brief Construct a new Render Pass object
+     *
+     * @param attachments Array of Attachments e.g. color, depth
+     * @param subpasses Array of Subpasses used for multi pass rendering e.g. Differed Rendering
+     * @param dependencies Dependencies
      */
-    class RenderPass
-    {
-    public:
-        /**
-         *@brief Construct a new Render Pass object
-         *
-         * @param attachments Array of Attachments e.g. color, depth
-         * @param subpasses Array of Subpasses used for multi pass rendering e.g. Differed Rendering
-         * @param dependencies Dependencies
-         */
-        RenderPass(Span<const Attachment> attachments, std::span<Subpass> subpasses, Span<const SubpassDependency> dependencies = {}, PipelineCacheHandle cache = PipelineCacheHandle());
-        RenderPass(Span<const Attachment> attachments, std::initializer_list<Subpass> subpasses, Span<const SubpassDependency> dependencies = {}, PipelineCacheHandle cache = PipelineCacheHandle());
+    RenderPass(
+        Span<const Attachment> attachments, std::vector<PipelineLayout> &&pipelineLayouts, std::span<Subpass> subpasses,
+        Span<const SubpassDependency> dependencies = {}, PipelineCacheHandle cache = PipelineCacheHandle()
+    );
+    RenderPass(
+        Span<const Attachment> attachments, std::vector<PipelineLayout> &&pipelineLayouts,
+        std::initializer_list<Subpass> subpasses, Span<const SubpassDependency> dependencies = {},
+        PipelineCacheHandle cache = PipelineCacheHandle()
+    );
 
-        RenderPass();
-        RenderPass(RenderPass&& other) noexcept;
-        RenderPass(const RenderPass& other) = delete;
-        ~RenderPass();
+    RenderPass();
+    RenderPass(RenderPass &&other) noexcept;
+    RenderPass(const RenderPass &other) = delete;
+    ~RenderPass();
 
-        RenderPass& operator=(RenderPass&& other) noexcept;
-        RenderPass& operator=(const RenderPass& other) = delete;
-        operator const RenderPassHandle& () const;
+    RenderPass &operator=(RenderPass &&other) noexcept;
+    RenderPass &operator=(const RenderPass &other) = delete;
+    operator const RenderPassHandle &() const;
 
-        Span<const PipelineLayout> GetPipelineLayouts() const;
-        Span<GraphicsPipelineHandle> GetPipelines();
-        Span<const GraphicsPipelineHandle> GetPipelines() const;
+    Span<const PipelineLayout> GetPipelineLayouts() const;
+    Span<GraphicsPipelineHandle> GetPipelines();
+    Span<const GraphicsPipelineHandle> GetPipelines() const;
 
-    private:
-        RenderPassHandle m_handle;
-
-        std::vector<GraphicsPipelineHandle> m_graphicsPipelines;
-        std::vector<PipelineLayout> m_pipelineLayouts;
-    };
-}
+  private:
+    RenderPassHandle m_handle;
+    std::vector<PipelineLayout> m_pipelineLayouts;
+    std::vector<GraphicsPipelineHandle> m_graphicsPipelines;
+};
+} // namespace vg
