@@ -58,7 +58,7 @@ vg::SurfaceHandle InitVulkan(GLFWwindow *window) {
     return windowSurface;
 }
 
-void Check(bool condition, const char* msg) {
+void Check(bool condition, const char *msg) {
     if (!condition) {
         std::cerr << "srakapierdaka:  " << msg << std::endl;
         std::terminate();
@@ -73,13 +73,9 @@ void TestRenderBuffer() {
     int alignment = 16;
 
     std::vector<uint32_t> regions;
-    for (int i = 0; i < 5; ++i) {
-        regions.push_back(rbzero.Allocate(allocSize, alignment));
-    }
+    for (int i = 0; i < 5; ++i) { regions.push_back(rbzero.Allocate(allocSize, alignment)); }
 
-    for (auto& region : regions) {
-        rbzero.Deallocate(std::move(region));
-    }
+    for (auto &region : regions) { rbzero.Deallocate(std::move(region)); }
     Check(rbzero.GetSize() == 0, "sraka po dealokacji");
 
     // drugi renderer
@@ -87,9 +83,9 @@ void TestRenderBuffer() {
     Check(rb.GetCapacity() >= initialCapacity, "zle przypisuje pojemnosc");
     Check(rb.GetSize() == 0, "poczatkowy rozmiar ma byc 0 nigga");
 
-    int allocSize = 256;
-    int alignment = 16;
-    
+    allocSize = 256;
+    alignment = 16;
+
     auto region = rb.Allocate(allocSize, alignment);
 
     // Access internal vectors directly since accessor methods don't exist
@@ -104,26 +100,21 @@ void TestRenderBuffer() {
     }
 
     rb.Write(region, data.data(), allocSize);
-    // tu blad  
-    /*
+    // tu blad
     auto mem = rb.backBuffer.MapMemory() + rb.Offset(region);
-    Check(mem != nullptr);
+    Check(mem != nullptr, "cokolwiek");
     Check(std::memcmp(mem, data.data(), allocSize) == 0, "to nie wiem co testuje ;)");
-    */
+
     // wpisujemy dalej
     uint32_t partialOffset = 256;
     uint32_t partialSize = 20;
-    std::vector<uint8_t> partialData = {
-        0x01, 0x02, 0x03, 0x04, 0x05,
-        0x06, 0x07, 0x08, 0x09, 0x0A,
-        0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-        0x10, 0x11, 0x12, 0x13, 0x14
-    };
-    
+    std::vector<uint8_t> partialData = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
+                                        0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14};
+
     rb.Write(region, partialData.data(), partialSize, partialOffset);
     Check(std::memcmp(mem + partialOffset, partialData.data(), partialSize) == 0, "Wpisywanie danych nei dziala ");
 
-    // tu blad 
+    // tu blad
     /*
     uint32_t newSize = allocSize * 2;
     rb.Reallocate(region, newSize);
@@ -144,8 +135,10 @@ void TestRenderBuffer() {
     auto r1 = rb.Allocate(30, 8);
     auto r2 = rb.Allocate(50, 16);
     uint32_t paddingR2 = rb.GetPadding(r2, rb.Offset(r1) + rb.Size(r1));
-    Check(paddingR2 == (rb.Alignment(r2) - (rb.Offset(r1) + rb.Size(r1)) % rb.Alignment(r2)) % rb.Alignment(r2), 
-          "Padding calculation for second region is incorrect");
+    Check(
+        paddingR2 == (rb.Alignment(r2) - (rb.Offset(r1) + rb.Size(r1)) % rb.Alignment(r2)) % rb.Alignment(r2),
+        "Padding calculation for second region is incorrect"
+    );
 }
 
 int main() {
@@ -261,5 +254,4 @@ int main() {
     glfwTerminate();
 
     TestRenderBuffer();
-
 }

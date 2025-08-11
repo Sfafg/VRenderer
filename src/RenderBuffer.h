@@ -13,7 +13,8 @@ enum class NextUpdate {
 };
 
 class RenderBuffer {
-  private:
+    // TODO: Dodać gettery i zmienić na private
+  public:
     std::vector<uint32_t> sizes;
     std::vector<uint32_t> alignments;
     std::vector<uint32_t> offsets;
@@ -56,7 +57,6 @@ class RenderBuffer {
 
     friend class Renderer;
     friend class Material;
-    
 };
 
 inline void RenderBuffer::Swap() {
@@ -164,9 +164,7 @@ inline int RenderBuffer::GetCapacity() const { return backBuffer.GetSize(); }
 
 inline int RenderBuffer::GetSize() const { return size; }
 
-inline uint32_t RenderBuffer::Size(uint32_t regionID) const {
-    return (regionID < sizes.size()) ? sizes[regionID] : 0;
-}
+inline uint32_t RenderBuffer::Size(uint32_t regionID) const { return (regionID < sizes.size()) ? sizes[regionID] : 0; }
 
 inline uint32_t RenderBuffer::Alignment(uint32_t regionID) const {
     return (regionID < alignments.size()) ? alignments[regionID] : 0;

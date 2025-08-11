@@ -67,24 +67,7 @@ endforeach()
 add_custom_target(Resources ALL DEPENDS ${RESOURCE_DEPEND})
 
 # VRenderer
-if(ShowConsole)
-    set(CMAKE_CXX_FLAGS "-mwindows")
-    add_compile_definitions(MAIN=WinMain)
-endif()
-
-if(NOT ShowConsole)
-    add_compile_definitions(MAIN=main)
-endif()
-
 add_executable(VRenderer ${SRC} ${TESTS_ROOT}/Source.cpp)
-
-# include(FetchContent)
-# FetchContent_Declare(
-#     ECS
-#     GIT_REPOSITORY https://github.com/Sfafg/ECS.git
-#     GIT_TAG main
-# )
-# FetchContent_MakeAvailable(ECS)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_link_libraries(VRenderer PRIVATE VGraphics-d glfw3 )
@@ -105,3 +88,26 @@ target_link_directories(VRenderer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/lib/"
 )
 add_dependencies(VRenderer Shaders Resources)
+
+# RendererTest
+add_executable(RendererTest ${SRC} ${TESTS_ROOT}/RendererTest.cpp)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_link_libraries(RendererTest PRIVATE VGraphics-d glfw3 )
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_link_libraries(RendererTest PRIVATE VGraphics glfw3 )
+endif()
+
+target_precompile_headers(RendererTest PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/VG/VG.h")
+
+target_include_directories(RendererTest PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    # "${ECS_SOURCE_DIR}/src"
+)
+target_link_directories(RendererTest PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/lib/"
+)
+add_dependencies(RendererTest Shaders Resources)
