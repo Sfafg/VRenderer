@@ -49,8 +49,14 @@ class RenderBuffer {
     int GetCapacity() const;
     int GetSize() const;
 
+    uint32_t Size(uint32_t regionID) const;
+    uint32_t Alignment(uint32_t regionID) const;
+    uint32_t Offset(uint32_t regionID) const;
+    uint32_t GetPadding(uint32_t regionID, uint32_t previousEnd) const;
+
     friend class Renderer;
     friend class Material;
+    
 };
 
 inline void RenderBuffer::Swap() {
@@ -157,3 +163,20 @@ template <typename T> inline void RenderBuffer::Write(uint32_t regionID, const T
 inline int RenderBuffer::GetCapacity() const { return backBuffer.GetSize(); }
 
 inline int RenderBuffer::GetSize() const { return size; }
+
+inline uint32_t RenderBuffer::Size(uint32_t regionID) const {
+    return (regionID < sizes.size()) ? sizes[regionID] : 0;
+}
+
+inline uint32_t RenderBuffer::Alignment(uint32_t regionID) const {
+    return (regionID < alignments.size()) ? alignments[regionID] : 0;
+}
+
+inline uint32_t RenderBuffer::Offset(uint32_t regionID) const {
+    return (regionID < offsets.size()) ? offsets[regionID] : 0;
+}
+
+inline uint32_t RenderBuffer::GetPadding(uint32_t regionID, uint32_t previousEnd) const {
+    if (regionID >= alignments.size()) return 0;
+    return (alignments[regionID] - previousEnd % alignments[regionID]) % alignments[regionID];
+}
