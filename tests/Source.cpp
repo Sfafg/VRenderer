@@ -80,8 +80,8 @@ int main() {
         ),
         glm::vec4(-0.5, 0.5, 0.3, 0.3)
     );
-    Material mat3(&mat1, 0.6f);
-    Material mat4(&mat2, glm::vec4(0.5, 0.5, 0.2, 0.3));
+    // Material mat3(&mat1, 0.6f);
+    // Material mat4(&mat2, glm::vec4(0.5, 0.5, 0.2, 0.3));
 
     Renderer::Init(window, &generalQueue, windowSurface, w, h);
 
@@ -147,8 +147,8 @@ int main() {
         Renderer::SetPassData({.viewProjection = proj * view});
         Renderer::StartFrame();
         Renderer::Draw(testMesh, mat1, instanceBuffer, 1000);
-        Renderer::Draw(testMesh2, mat3, instanceBuffer, 1000);
-        Renderer::Draw(testMesh2, mat4);
+        // Renderer::Draw(testMesh2, mat3, instanceBuffer, 1000);
+        // Renderer::Draw(testMesh2, mat4);
         Renderer::Draw(testMesh1, mat2);
         Renderer::EndFrame();
         Renderer::Present(generalQueue);

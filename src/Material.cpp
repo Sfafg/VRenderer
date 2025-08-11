@@ -13,7 +13,7 @@ Material::Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, con
 
     if (materialData) {
         index = materialBuffer.Allocate(byteSize, byteSize);
-        materialBuffer.Write(index, materialBuffer, byteSize);
+        materialBuffer.Write(index, materialData, byteSize);
     }
     materials.push_back(this);
 

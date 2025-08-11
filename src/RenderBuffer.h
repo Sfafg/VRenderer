@@ -89,6 +89,9 @@ inline uint32_t RenderBuffer::Allocate(int byteSize, int alignment) {
     size += padding + byteSize;
     if (size >= backBuffer.GetSize()) Reserve(size);
 
+    sizes.reserve(10);
+    alignments.reserve(10);
+    offsets.reserve(10);
     sizes.push_back(byteSize);
     alignments.push_back(alignment);
     offsets.push_back(currentSize + padding);

@@ -117,7 +117,7 @@ void Renderer::Draw(const Mesh &mesh, const Material &material) {
 void Renderer::EndFrame() {
     for (int i = 0; i < Material::subpasses.size(); i++) {
         commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[i]));
-        int variantCount = std::max(1U, Material::materialBuffer.sizes[i] / Material::materialBuffer.offsets[i]);
+        int variantCount = std::max(1U, Material::materialBuffer.sizes[i] / Material::materialBuffer.alignments[i]);
         for (int j = 0; j < variantCount; j++) {
             if (renderMeshes[i][j].size() == 0) continue;
             if (Material::materialBuffer.sizes[i] != 0)
