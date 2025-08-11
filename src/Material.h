@@ -11,17 +11,12 @@ class Material {
 
     static std::vector<vg::Subpass> subpasses;
     static std::vector<vg::SubpassDependency> dependecies;
-    static std::vector<RenderBuffer::Region> materialDataRegions;
+    static std::vector<Material *> materials;
     static RenderBuffer materialBuffer;
-    // static vg::Buffer materialBuffer;
-    // static std::vector<int> materialDataSize;
-    // static std::vector<int> materialDataOffset;
-    // static std::vector<int> materialVariants;
 
     uint16_t index;
     uint16_t variant;
 
-    // TO DO: Add destructors, move operators.
     Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize);
 
   public:
@@ -59,6 +54,8 @@ class Material {
     };
 
   public:
+    Material(Material *parentMaterial, const void *materialData = nullptr, int byteSize = 0);
+
     Material(
         const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
         vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
@@ -72,8 +69,6 @@ class Material {
         MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const void *materialData = nullptr,
         int byteSize = 0
     );
-
-    Material(Material *parentMaterial, const void *materialData = nullptr, int byteSize = 0);
 
     template <typename T>
     Material(
@@ -91,6 +86,13 @@ class Material {
     );
 
     template <typename T> Material(Material *material, const T &materialData);
+
+    Material();
+    Material(Material &&);
+    Material &operator=(Material &&);
+    Material(const Material &) = delete;
+    Material &operator=(const Material &) = delete;
+    ~Material();
 };
 template <typename T>
 Material::Material(

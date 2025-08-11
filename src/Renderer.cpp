@@ -74,8 +74,7 @@ void Renderer::StartFrame() {
     instanceCount.clear();
     instanceCount.resize(Material::subpasses.size());
     for (int i = 0; i < Material::subpasses.size(); i++) {
-        const RenderBuffer::Region &region = Material::materialDataRegions[i];
-        int variantCount = std::max(1U, region.Size() / region.Alignment());
+        int variantCount = std::max(1U, Material::materialBuffer.sizes[i] / Material::materialBuffer.alignments[i]);
         renderMeshes[i].clear();
         renderMeshes[i].resize(variantCount);
         instanceBuffers[i].clear();
@@ -108,6 +107,7 @@ void Renderer::Draw(const Mesh &mesh, const Material &material, const vg::Buffer
     instanceBuffers[material.index][material.variant].push_back(&instanceBuffer);
     Renderer::instanceCount[material.index][material.variant].push_back(instanceCount);
 }
+
 void Renderer::Draw(const Mesh &mesh, const Material &material) {
     renderMeshes[material.index][material.variant].push_back(&mesh);
     instanceBuffers[material.index][material.variant].push_back(nullptr);
@@ -117,12 +117,13 @@ void Renderer::Draw(const Mesh &mesh, const Material &material) {
 void Renderer::EndFrame() {
     for (int i = 0; i < Material::subpasses.size(); i++) {
         commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[i]));
-        const RenderBuffer::Region &region = Material::materialDataRegions[i];
-        for (int j = 0; j < std::max(1U, region.Size() / region.Alignment()); j++) {
+        int variantCount = std::max(1U, Material::materialBuffer.sizes[i] / Material::materialBuffer.offsets[i]);
+        for (int j = 0; j < variantCount; j++) {
             if (renderMeshes[i][j].size() == 0) continue;
-            if (region.Size() != 0)
+            if (Material::materialBuffer.sizes[i] != 0)
                 commandBuffer[frameIndex].Append(cmd::PushConstants(
-                    renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0, region.Offset() / region.Alignment() + j
+                    renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
+                    Material::materialBuffer.offsets[i] / Material::materialBuffer.alignments[i] + j
                 ));
 
             for (auto &&mesh : renderMeshes[i][j]) {
@@ -162,8 +163,6 @@ void Renderer::Destroy() {
     renderFinishedSemaphore.clear();
     imageAvailableSemaphore.clear();
     inFlightFence.clear();
-    vg::Buffer b;
-    std::swap(b, Material::materialBuffer);
 }
 
 bool Renderer::IsInitialized() { return window != nullptr; }

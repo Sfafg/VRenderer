@@ -3,52 +3,29 @@
 #include <cassert>
 
 Material::Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize)
-    : index(subpasses.size()), variant(0) {
-    // Book keeping.
+    : variant(0) {
+
+    // TODO: Zrobić lepiej.
+    if (materialBuffer.backBuffer.GetSize() == 0) materialBuffer = RenderBuffer(16, vg::BufferUsage::StorageBuffer);
+
     subpasses.emplace_back(std::move(subpass));
     dependecies.emplace_back(std::move(dependecy));
 
-    RenderBuffer::Region region;
     if (materialData) {
-        materialBuffer.MoveRegionVariable(materialBuffer.Allocate(byteSize, byteSize), region);
-        materialBuffer.Write(region, materialBuffer, byteSize);
+        index = materialBuffer.Allocate(byteSize, byteSize);
+        materialBuffer.Write(index, materialBuffer, byteSize);
     }
-    materialDataRegions.emplace_back(std::move(region));
+    materials.push_back(this);
 
-    // Material::materialDataSize.push_back(byteSize);
-    // Material::materialDataOffset.push_back(std::ceil(materialBuffer.GetSize() / (float)byteSize));
-    // Material::materialVariants.push_back(1);
-    // if (materialData) {
-    //     // Write data to staging buffer.
-    //     vg::Buffer staging(byteSize, vg::BufferUsage::TransferSrc);
-    //     vg::Allocate(staging, vg::MemoryProperty::HostVisible);
-    //     memcpy(staging.MapMemory(), materialData, byteSize);
-
-    //     // Allocate new, bigger buffer.
-    //     vg::Buffer newBuffer(
-    //         (materialDataOffset[index] + 1) * materialDataSize[index],
-    //         {vg::BufferUsage::TransferDst, vg::BufferUsage::TransferSrc, vg::BufferUsage::StorageBuffer}
-    //     );
-    //     vg::Allocate(newBuffer, vg::MemoryProperty::DeviceLocal);
-
-    //     // Copy old and new data to the new buffer.
-    //     vg::CmdBuffer cmd(vg::currentDevice->GetQueue(0));
-    //     cmd.Begin();
-    //     if (materialBuffer.GetSize() != 0)
-    //         cmd.Append(vg::cmd::CopyBuffer(materialBuffer, newBuffer, {{materialBuffer.GetSize()}}));
-
-    //     cmd.Append(vg::cmd::CopyBuffer(
-    //                    staging, newBuffer,
-    //                    {{staging.GetSize(), 0, (uint64_t)materialDataOffset[index] * materialDataSize[index]}}
-    //                ))
-    //         .End()
-    //         .Submit()
-    //         .Await();
-
-    //     // Swap buffers and recreate renderpasses.
-    //     std::swap(materialBuffer, newBuffer);
-    // }
     Renderer::RecreateRenderpass();
+}
+
+Material::Material(Material *material, const void *materialData, int byteSize)
+    : index(material->index), variant(materialBuffer.sizes[material->index] / byteSize) {
+    assert(byteSize == materialBuffer.sizes[material->index]);
+    materialBuffer.Reallocate(material->index, materialBuffer.sizes[material->index] + byteSize);
+    materialBuffer.Write(index, materialData, byteSize, variant * byteSize);
+    materials.push_back(this);
 }
 
 Material::Material(
@@ -100,54 +77,33 @@ Material::Material(
           std::move(dependecy), materialData, dataSize
       ) {}
 
-Material::Material(Material *material, const void *materialData, int byteSize) : variant(index.Size() / byteSize + 1) {
-    assert(byteSize == material->index.Size());
-    index.index = material->index.index;
-    materialBuffer.Reallocate(index, index.Size() + byteSize);
-    materialBuffer.Write(index, materialData, byteSize, variant * index.Size());
-
-    // // Write data to a staging buffer.
-    // vg::Buffer staging(byteSize, vg::BufferUsage::TransferSrc);
-    // vg::Allocate(staging, vg::MemoryProperty::HostVisible);
-    // memcpy(staging.MapMemory(), materialData, byteSize);
-
-    // uint64_t writePoint = (uint64_t)(materialDataOffset[index] + variant) * byteSize;
-    // uint64_t writeOffset = writePoint + byteSize;
-    // uint64_t newSize = writeOffset;
-    // std::vector<vg::BufferCopyRegion> regions;
-    // regions.push_back(vg::BufferCopyRegion(writePoint));
-    // for (int i = index + 1; i < materialDataOffset.size(); i++) {
-    //     uint64_t size = materialDataSize[i] * materialVariants[i];
-    //     if (size == 0) continue;
-    //     uint64_t readOffset = materialDataOffset[i] * materialDataSize[i];
-    //     materialDataOffset[i] = std::ceil(writeOffset / (float)materialDataSize[i]);
-    //     writeOffset = materialDataOffset[i] * materialDataSize[i];
-    //     newSize = writeOffset + size;
-
-    //     regions.push_back(vg::BufferCopyRegion(size, readOffset, writeOffset));
-    // }
-
-    // // Allocate new, bigger buffer.
-    // vg::Buffer newBuffer(
-    //     newSize, {vg::BufferUsage::TransferDst, vg::BufferUsage::TransferSrc, vg::BufferUsage::StorageBuffer}
-    // );
-    // vg::Allocate(newBuffer, vg::MemoryProperty::DeviceLocal);
-
-    // // Copy old and new data to the new buffer.
-    // vg::CmdBuffer(vg::currentDevice->GetQueue(0))
-    //     .Begin()
-    //     .Append(vg::cmd::CopyBuffer(materialBuffer, newBuffer, regions))
-    //     .Append(vg::cmd::CopyBuffer(staging, newBuffer, {{staging.GetSize(), 0, writePoint}}))
-    //     .End()
-    //     .Submit()
-    //     .Await();
-    // std::swap(materialBuffer, newBuffer);
+Material::Material() : index(-1), variant(0) {}
+Material::Material(Material &&o) : Material() {
+    std::swap(index, o.index);
+    std::swap(variant, o.variant);
+    if (index != (uint16_t)-1) materials[index] = this;
 }
+Material &Material::operator=(Material &&o) {
+    if (this == &o) return *this;
 
+    if (index != (uint16_t)-1 && o.index != (uint16_t)-1) std::swap(materials[index], materials[o.index]);
+    else if (o.index != (uint16_t)-1) materials[o.index] = this;
+
+    std::swap(index, o.index);
+    std::swap(variant, o.variant);
+
+    return *this;
+}
+Material::~Material() {
+    if (index == (uint16_t)-1) return;
+
+    // Tutaj powinno usuwać tylko swój wariant.
+    materialBuffer.Deallocate(index);
+    materials.erase(materials.begin() + index);
+    for (int i = index; i < materials.size(); i++) materials[i]->index--;
+    index = -1;
+}
 std::vector<vg::Subpass> Material::subpasses;
 std::vector<vg::SubpassDependency> Material::dependecies;
-std::vector<RenderBuffer::Region> Material::materialDataRegions;
-RenderBuffer Material::materialBuffer(0, vg::BufferUsage::StorageBuffer);
-// std::vector<int> Material::materialDataSize;
-// std::vector<int> Material::materialDataOffset;
-// std::vector<int> Material::materialVariants;
+std::vector<Material *> Material::materials;
+RenderBuffer Material::materialBuffer;

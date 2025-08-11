@@ -26,19 +26,6 @@ vg::SurfaceHandle InitVulkan(GLFWwindow *window) {
         vg::Instance({"VK_KHR_surface", "VK_KHR_win32_surface"}, [](vg::MessageSeverity severity, const char *message) {
             if (severity < vg::MessageSeverity::Warning) return;
             std::cout << message << '\n';
-            // std::string m(message);
-            // m = m.substr(m.find('[') + 2, m.size());
-            // std::string brackets = m.substr(0, m.find(']') - 1);
-            // m = m.substr(brackets.size(), m.size());
-            // m = m.substr(m.find(',') + 1, m.size());
-            // std::string type = m.substr(0, m.find(';'));
-            // m = m.substr(type.size() + 3, m.size());
-            // m = m.substr(m.find('|') + 1, m.size());
-            // m = m.substr(0, m.rfind('('));
-            // std::string me = m.substr(0, m.rfind('.'));
-            // m = m.substr(m.rfind(':') + 1, m.size());
-
-            // std::cout << type << me << '.' << m << '\n';
         });
 
     vg::SurfaceHandle windowSurface = vg::Window::CreateWindowSurface(vg::instance, window);
@@ -79,6 +66,7 @@ int main() {
         ),
         0.2f
     );
+
     Material mat2(
         "resources/shaders/shader1.vert.spv", "resources/shaders/shader1.frag.spv",
         vg::VertexLayout(

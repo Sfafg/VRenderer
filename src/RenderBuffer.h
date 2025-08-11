@@ -1,5 +1,6 @@
 #pragma once
 #include "VG/VG.h"
+#include <cassert>
 #include <vector>
 
 /**
@@ -16,8 +17,6 @@ class RenderBuffer {
     std::vector<uint32_t> sizes;
     std::vector<uint32_t> alignments;
     std::vector<uint32_t> offsets;
-    std::unordered_map<uint32_t, uint32_t> idToIndex;
-    uint32_t idCounter;
 
     uint32_t size;
     vg::Flags<vg::BufferUsage> bufferUsage;
@@ -27,32 +26,31 @@ class RenderBuffer {
     void Swap();
 
   public:
-    using Region = uint32_t;
-
+    RenderBuffer();
     RenderBuffer(int capacity, vg::Flags<vg::BufferUsage> bufferUsage);
+    RenderBuffer(RenderBuffer &&) = default;
+    RenderBuffer &operator=(RenderBuffer &&) = default;
+    RenderBuffer(const RenderBuffer &) = delete;
+    RenderBuffer &operator=(const RenderBuffer &) = delete;
+    ~RenderBuffer();
 
     operator vg::Buffer &();
     operator const vg::Buffer &() const;
 
-    Region Allocate(int byteSize, int alignment);
-    void Reallocate(Region &region, int newByteSize);
-    void Deallocate(Region &&region);
+    uint32_t Allocate(int byteSize, int alignment);
+    uint32_t Reallocate(uint32_t regionID, int newByteSize);
+    void Deallocate(uint32_t regionID);
     void Reserve(int capacity);
 
-    void Write(const Region &region, const void *data, uint32_t dataSize, uint32_t writeOffset = 0);
-    void Write(const Region &region, const void *data);
-    template <typename T> void Write(const Region &region, const T &data, uint32_t writeOffset = 0);
+    void Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset = 0);
+    void Write(uint32_t regionID, const void *data);
+    template <typename T> void Write(uint32_t regionID, const T &data, uint32_t writeOffset = 0);
 
     int GetCapacity() const;
     int GetSize() const;
 
-    uint32_t Size(const Region &region) const;
-    uint32_t Alignment(const Region &region) const;
-    uint32_t Offset(const Region &region) const;
-    uint32_t GetPadding(const Region &region, uint32_t offset) const;
-    void MoveRegionVariable(Region &&from, Region &&to);
-
     friend class Renderer;
+    friend class Material;
 };
 
 inline void RenderBuffer::Swap() {
@@ -64,78 +62,75 @@ inline void RenderBuffer::Swap() {
     memcpy(backBuffer.GetMemory(), frontBuffer.GetMemory(), frontBuffer.GetSize());
 }
 
+inline RenderBuffer::RenderBuffer() {}
+
 inline RenderBuffer::RenderBuffer(int capacity, vg::Flags<vg::BufferUsage> bufferUsage)
-    : frontBuffer(capacity, bufferUsage), backBuffer(capacity, bufferUsage), size(0), bufferUsage(bufferUsage),
-      idCounter(0) {
+    : frontBuffer(capacity, bufferUsage), backBuffer(capacity, bufferUsage), size(0), bufferUsage(bufferUsage) {
     vg::Allocate(frontBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
     vg::Allocate(backBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
 }
+
+inline RenderBuffer::~RenderBuffer() {}
 
 inline RenderBuffer::operator vg::Buffer &() { return frontBuffer; }
 
 inline RenderBuffer::operator const vg::Buffer &() const { return frontBuffer; }
 
-inline RenderBuffer::Region RenderBuffer::Allocate(int byteSize, int alignment) {
+inline uint32_t RenderBuffer::Allocate(int byteSize, int alignment) {
     int currentSize = this->size;
     int padding = (alignment - currentSize % alignment) % alignment;
 
     size += padding + byteSize;
     if (size >= backBuffer.GetSize()) Reserve(size);
 
-    Region region = idCounter++;
     sizes.push_back(byteSize);
     alignments.push_back(alignment);
     offsets.push_back(currentSize + padding);
-    idToIndex[idCounter] = offsets.size();
 
-    return region;
+    return sizes.size() - 1;
 }
 
-inline void RenderBuffer::Reallocate(RenderBuffer::Region &region, int newByteSize) {
+inline uint32_t RenderBuffer::Reallocate(uint32_t regionID, int newByteSize) {
     // TO DO: Add case for shrinking.
 
-    uint32_t regionIndex = idToIndex[region];
+    if (regionID == offsets.size()) {
+        Deallocate(regionID);
 
-    if (regionIndex == offsets.size()) {
-        Deallocate(std::move(region));
-
-        Region missingRegion = Allocate(newByteSize, Alignment(region));
-        region = missingRegion;
-        return;
+        return Allocate(newByteSize, alignments[regionID]);
     }
 
-    Region newRegion = Allocate(newByteSize, Alignment(region));
-    memcpy(backBuffer.MapMemory() + Offset(newRegion), backBuffer.MapMemory() + Offset(region), Size(region));
+    uint32_t newRegion = Allocate(newByteSize, alignments[regionID]);
+    memcpy(backBuffer.MapMemory() + offsets[newRegion], backBuffer.MapMemory() + offsets[regionID], sizes[regionID]);
 
-    uint32_t offset = offsets[regionIndex];
-    if (region != 0) offset = offsets[regionIndex - 1] + sizes[regionIndex - 1];
+    uint32_t offset = offsets[regionID];
+    if (regionID != 0) offset = offsets[regionID - 1] + sizes[regionID - 1];
 
-    for (auto i = regions.begin() + region.index + 1; i != regions.end(); i++) {
-        Region &reg = **i;
-        auto padding = GetPadding(reg, offset);
+    for (auto i = regionID + 1; i < offsets.size(); i++) {
+        auto padding = (alignments[i] - offset % alignments[i]) % alignments[i];
         offset += padding;
 
-        memcpy(backBuffer.MapMemory() + offset, backBuffer.MapMemory() + Offset(reg), Size(region));
+        memcpy(backBuffer.MapMemory() + offset, backBuffer.MapMemory() + offsets[i], sizes[i]);
 
-        offset += Size(reg);
+        offsets[i] = offset;
+        offset += sizes[i];
     }
     size = offset;
 
-    std::swap(region, newRegion);
+    return newRegion;
 }
 
-inline void RenderBuffer::Deallocate(RenderBuffer::Region &&region) {
-    uint32_t offset = Offset(region);
-    if (region.index != 0) offset = Offset(*regions[region.index - 1]) + Size(*regions[region.index - 1]);
+inline void RenderBuffer::Deallocate(uint32_t regionID) {
+    uint32_t offset = offsets[regionID];
+    if (regionID != 0) offset = offsets[regionID - 1 + sizes[regionID - 1]];
 
-    for (auto i = regions.begin() + region.index + 1; i != regions.end(); i++) {
-        Region &reg = **i;
-        auto padding = GetPadding(reg, offset);
+    for (auto i = regionID + 1; i < offsets.size(); i++) {
+        auto padding = (alignments[i] - offset % alignments[i]) % alignments[i];
         offset += padding;
 
-        memcpy(backBuffer.MapMemory() + offset, backBuffer.MapMemory() + Offset(reg), Size(region));
+        memcpy(backBuffer.MapMemory() + offset, backBuffer.MapMemory() + offsets[i], sizes[i]);
 
-        offset += Size(reg);
+        offsets[i] = offset;
+        offset += sizes[i];
     }
     size = offset;
 }
@@ -150,35 +145,15 @@ inline void RenderBuffer::Reserve(int capacity) {
     std::swap(backBuffer, newBuffer);
 }
 
-inline void RenderBuffer::Write(const Region &region, const void *data, uint32_t dataSize, uint32_t writeOffset) {
-    memcpy(backBuffer.GetMemory() + Offset(region) + writeOffset, data, dataSize);
+inline void RenderBuffer::Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset) {
+    memcpy(backBuffer.GetMemory() + offsets[regionID] + writeOffset, data, dataSize);
 }
-inline void RenderBuffer::Write(const Region &region, const void *data) { Write(region, data, Size(region)); }
+inline void RenderBuffer::Write(uint32_t regionID, const void *data) { Write(regionID, data, sizes[regionID]); }
 
-template <typename T> inline void RenderBuffer::Write(const Region &region, const T &data, uint32_t writeOffset) {
-    Write(region, &data, sizeof(T), writeOffset);
+template <typename T> inline void RenderBuffer::Write(uint32_t regionID, const T &data, uint32_t writeOffset) {
+    Write(regionID, &data, sizeof(T), writeOffset);
 }
 
 inline int RenderBuffer::GetCapacity() const { return backBuffer.GetSize(); }
 
 inline int RenderBuffer::GetSize() const { return size; }
-
-inline RenderBuffer::Region::Region(uint32_t index) : index(index) {}
-
-inline RenderBuffer::Region::Region() : index(-1) {}
-
-inline RenderBuffer::Region::operator uint32_t() const { return index; }
-
-inline uint32_t RenderBuffer::Size(const Region &region) const { return sizes[region.index]; }
-
-inline uint32_t RenderBuffer::Alignment(const Region &region) const { return alignments[region.index]; }
-
-inline uint32_t RenderBuffer::Offset(const Region &region) const { return offsets[region.index]; }
-
-inline uint32_t RenderBuffer::GetPadding(const Region &region, uint32_t offset) const {
-    return (alignments[region.index] - offset % alignments[region.index]) % alignments[region.index];
-}
-inline void RenderBuffer::MoveRegionVariable(Region &&from, Region &&to) {
-    std::swap(from.index, to.index);
-    if (to.index != -1) regions[to.index] = &to;
-}
