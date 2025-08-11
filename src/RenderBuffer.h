@@ -13,7 +13,10 @@ enum class NextUpdate {
 };
 
 class RenderBuffer {
-    // TODO: Dodać gettery i zmienić na private
+    // TODO: Dodać gettery i zmienić na private.
+    // TODO: Przenieść definicje do pliku cpp.
+    // TODO: Umożliwić usuwanie dowolnej części regionu.
+    // TODO: Asserty by sprawdzić poprawność parametrów.
   public:
     std::vector<uint32_t> sizes;
     std::vector<uint32_t> alignments;
@@ -46,6 +49,11 @@ class RenderBuffer {
     void Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset = 0);
     void Write(uint32_t regionID, const void *data);
     template <typename T> void Write(uint32_t regionID, const T &data, uint32_t writeOffset = 0);
+
+    // Podanie size większego niż region powinno clampować rozmiar do rozmiaru regionu.
+    // TODO: Zaimplementować te funkcje.
+    void Read(uint32_t regionID, void *data, uint32_t dataSize = -1, uint32_t readOffset = 0);
+    template <typename T> T Read(uint32_t regionID, uint32_t readOffset = 0);
 
     int GetCapacity() const;
     int GetSize() const;
@@ -169,6 +177,7 @@ inline int RenderBuffer::GetSize() const { return size; }
 
 inline uint32_t RenderBuffer::Size(uint32_t regionID) const { return (regionID < sizes.size()) ? sizes[regionID] : 0; }
 
+// TODO: Sprawdzanie poprawności zrobić assertem, dzięki temu będzie tylko w wersji debug.
 inline uint32_t RenderBuffer::Alignment(uint32_t regionID) const {
     return (regionID < alignments.size()) ? alignments[regionID] : 0;
 }

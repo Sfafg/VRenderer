@@ -9,6 +9,10 @@
 class Material {
     friend class Renderer;
 
+    // TODO: W destruktorze zmienić aby usuwała się tylko porcja danych wariantu, chyba że jest to ostatni wariant
+    // materiału to cały region.
+    // TODO: W wypadku realokacji powinno się poprawić indeksy materiałów.
+    // TODO: Zrobić żeby działało.
     static std::vector<vg::Subpass> subpasses;
     static std::vector<vg::SubpassDependency> dependecies;
     static std::vector<Material *> materials;
