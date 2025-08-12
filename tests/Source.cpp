@@ -26,7 +26,26 @@ vg::SurfaceHandle InitVulkan(GLFWwindow *window) {
     vg::instance =
         vg::Instance({"VK_KHR_surface", "VK_KHR_win32_surface"}, [](vg::MessageSeverity severity, const char *message) {
             if (severity < vg::MessageSeverity::Warning) return;
-            std::cout << message << '\n';
+            // TODO: Zrobić żeby errory były bardziej kompaktowe np.
+            // Validation Error: [ VUID-vkCmdDrawIndexed-None-08114 ] Object 0: handle = 0x2cfba2000000001c, type =
+            // VK_OBJECT_TYPE_DESCRIPTOR_SET; | Mess
+            // ageID = 0x3f6fd836 | Descriptor set VkDescriptorSet 0x2cfba2000000001c[] encountered the following
+            // validation error at vkCmdDrawIndexed ti me: Descriptor in binding #1 index 0 is using buffer VkBuffer
+            // 0xcb3ee80000000007[] that is invalid or has been destroyed. The Vulkan spec states: Descriptors in each
+            // bound descriptor set, specified via vkCmdBindDescriptorSets, must be valid if they are statically used by
+            // the VkPipeline bound to the pipeline bind point used by this command and the bound VkPipeline was not
+            // created with VK_PIPELINE_CREATE_DESCRIPT OR_BUFFER_BIT_EXT
+            // (https://vulkan.lunarg.com/doc/view/1.3.261.1/windows/1.3-extensions/vkspec.html#VUID-vkCmdDrawIndexed-None-08114)
+            // na
+            // Validation Error: [vkCmdDrawIndexed] handle = 0x2cfba2000000001c, type =
+            // VK_OBJECT_TYPE_DESCRIPTOR_SET;
+            // Descriptor set VkDescriptorSet 0x2cfba2000000001c[] encountered the following
+            // validation error at vkCmdDrawIndexed ti me: Descriptor in binding #1 index 0 is using buffer VkBuffer
+            // 0xcb3ee80000000007[] that is invalid or has been destroyed. Descriptors in each
+            // bound descriptor set, specified via vkCmdBindDescriptorSets, must be valid if they are statically used by
+            // the VkPipeline bound to the pipeline bind point used by this command and the bound VkPipeline was not
+            // created with VK_PIPELINE_CREATE_DESCRIPT OR_BUFFER_BIT_EXT
+            std::cout << message << '\n' << '\n';
         });
 
     vg::SurfaceHandle windowSurface = vg::Window::CreateWindowSurface(vg::instance, window);

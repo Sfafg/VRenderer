@@ -24,9 +24,13 @@ void Renderer::RecreateRenderpass() {
     );
     descriptorSets = descriptorPool.Allocate(layouts);
 
+    Material::materialBuffer.Swap();
+    Material::materialBuffer.Swap();
     for (size_t i = 0; i < descriptorSets.size(); i++) {
         descriptorSets[i].AttachBuffer(DescriptorType::UniformBuffer, passBuffer, 0, -1, 0, 0);
         descriptorSets[i].AttachBuffer(DescriptorType::StorageBuffer, Material::materialBuffer, 0, -1, 1, 0);
+        vg::BufferHandle h = (vg::Buffer &)Material::materialBuffer;
+        Material::materialBuffer.Swap();
     }
 
     framebuffers.resize(swapchain.GetImageCount());
@@ -67,6 +71,7 @@ void Renderer::SetPassData(const PassData &data) {
 }
 
 void Renderer::StartFrame() {
+    Material::materialBuffer.Swap();
     renderMeshes.clear();
     renderMeshes.resize(Material::subpasses.size());
     instanceBuffers.clear();

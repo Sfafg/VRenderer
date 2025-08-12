@@ -14,6 +14,7 @@ enum class NextUpdate {
 
 class RenderBuffer {
     // TODO: Umożliwić usuwanie dowolnej części regionu.
+    // TODO: Automatyczne updatowanie descriptorów.
   private:
     std::vector<uint32_t> sizes;
     std::vector<uint32_t> alignments;
