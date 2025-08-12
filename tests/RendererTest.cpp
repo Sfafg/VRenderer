@@ -67,7 +67,7 @@ void Check(bool condition, const char *msg) {
 
 void TestRenderBuffer() {
     constexpr int initialCapacity = 1024;
-    // sprawdzamy czy po usunieciu wszystkiego nie wywali
+    // test 1: Dealokacja wszystkich regionów w RenderBuffer
     RenderBuffer rbzero(initialCapacity, vg::BufferUsage::VertexBuffer);
     int allocSize = 256;
     int alignment = 16;
@@ -78,7 +78,7 @@ void TestRenderBuffer() {
     for (auto &region : regions) { rbzero.Deallocate(std::move(region)); }
     Check(rbzero.GetSize() == 0, "sraka po dealokacji");
 
-    // drugi renderer
+    // test 2: Podstawowe operacje na RenderBuffer
     RenderBuffer rb(initialCapacity, vg::BufferUsage::VertexBuffer);
     Check(rb.GetCapacity() >= initialCapacity, "zle przypisuje pojemnosc");
     Check(rb.GetSize() == 0, "poczatkowy rozmiar ma byc 0 nigga");
@@ -94,44 +94,51 @@ void TestRenderBuffer() {
     Check(rb.Offset(region) % alignment == 0, "offset regionu nie jest aligned");
     Check(rb.GetSize() >= allocSize, "zle przypisuje rozmiar render bufora po alokacji regionu");
 
+    // test 3: Sprawdzenie poprawności alokacji i zapisu danych do regionu
     std::vector<uint8_t> data(allocSize);
     for (int i = 0; i < allocSize; i++) {
         data[i] = static_cast<uint8_t>(i % 256); // cokolwiek zeby bylo idk
     }
-
     rb.Write(region, data.data(), allocSize);
-    // tu blad
-    auto mem = rb.backBuffer.MapMemory() + rb.Offset(region);
-    Check(mem != nullptr, "cokolwiek");
-    Check(std::memcmp(mem, data.data(), allocSize) == 0, "to nie wiem co testuje ;)");
 
-    // wpisujemy dalej
-    uint32_t partialOffset = 256;
+    // odczytujemy dane z backBuffer i sprawdzamy czy są poprawne
+    std::vector<uint8_t> readData(allocSize);
+    rb.Read(region, readData.data(), allocSize);
+    Check(std::memcmp(readData.data(), data.data(), allocSize) == 0, 
+          "Dane nie zostaly poprawnie zapisane");
+          
+    // test 5: Częściowe wpisanie danych (dalej)
+    uint32_t partialOffset = 100;
     uint32_t partialSize = 20;
     std::vector<uint8_t> partialData = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
                                         0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14};
 
     rb.Write(region, partialData.data(), partialSize, partialOffset);
-    Check(std::memcmp(mem + partialOffset, partialData.data(), partialSize) == 0, "Wpisywanie danych nei dziala ");
-
-    // tu blad
-    /*
+    // odczytujemy czesciowe dane i sprawdzamy czy są poprawne
+    std::vector<uint8_t> partialReadData(partialSize);
+    rb.Read(region, partialReadData.data(), partialSize, partialOffset);
+    Check(std::memcmp(partialReadData.data(), partialData.data(), partialSize) == 0, 
+          "Wpisywanie częściowych danych nie działa");
+    
+    // Test 6: Realokacja
     uint32_t newSize = allocSize * 2;
-    rb.Reallocate(region, newSize);
-    auto newMem = rb.backBuffer.MapMemory() + rb.Offset(region);
-    Check(std::memcmp(newMem, data.data(), allocSize) == 0, "Realokacja nie zachowala danych");
-    */
-    // Deallocate region and verify size decreases
+    uint32_t newRegion = rb.Reallocate(region, newSize);
+    
+    std::vector<uint8_t> reallocReadData(allocSize);
+    rb.Read(newRegion, reallocReadData.data(), allocSize);
+    Check(std::memcmp(reallocReadData.data(), data.data(), allocSize) == 0, "Realokacja nie zachowala danych");
+    
+    // Sprawdzenie, czy nowy region ma poprawny rozmiar i offset
     int sizeBeforeDealloc = rb.GetSize();
     rb.Deallocate(std::move(region));
     Check(rb.GetSize() <= sizeBeforeDealloc, "Rozmiar render bufora po dealokacji nie zmniejszyl sie");
 
-    // Reserve bigger capacity and verify capacity increases
+    // Test 7: Rezerwacja większej pojemności
     int biggerCapacity = initialCapacity * 4;
     rb.Reserve(biggerCapacity);
     Check(rb.GetCapacity() >= biggerCapacity, "Rezerwacja wiekszej pojemnosci nie dziala");
 
-    // Allocate multiple regions, check padding calculation correctness
+    // Test 8: Sprawdzenie poprawności alokacji i zapisu danych do regionu po rezerwacji
     auto r1 = rb.Allocate(30, 8);
     auto r2 = rb.Allocate(50, 16);
     uint32_t paddingR2 = rb.GetPadding(r2, rb.Offset(r1) + rb.Size(r1));

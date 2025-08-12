@@ -17,7 +17,7 @@ class RenderBuffer {
     // TODO: Przenieść definicje do pliku cpp.
     // TODO: Umożliwić usuwanie dowolnej części regionu.
     // TODO: Asserty by sprawdzić poprawność parametrów.
-  public:
+  private:
     std::vector<uint32_t> sizes;
     std::vector<uint32_t> alignments;
     std::vector<uint32_t> offsets;
@@ -44,14 +44,14 @@ class RenderBuffer {
     uint32_t Allocate(int byteSize, int alignment);
     uint32_t Reallocate(uint32_t regionID, int newByteSize);
     void Deallocate(uint32_t regionID);
+    void DeallocatePartial(uint32_t regionID, uint32_t removeOffset, uint32_t removeSize);
     void Reserve(int capacity);
 
     void Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset = 0);
     void Write(uint32_t regionID, const void *data);
     template <typename T> void Write(uint32_t regionID, const T &data, uint32_t writeOffset = 0);
 
-    // Podanie size większego niż region powinno clampować rozmiar do rozmiaru regionu.
-    // TODO: Zaimplementować te funkcje.
+    // do sprawdzenia te implementacje
     void Read(uint32_t regionID, void *data, uint32_t dataSize = -1, uint32_t readOffset = 0);
     template <typename T> T Read(uint32_t regionID, uint32_t readOffset = 0);
 
@@ -151,6 +151,10 @@ inline void RenderBuffer::Deallocate(uint32_t regionID) {
     }
     size = offset;
 }
+// TODO/TO DO NIEDOKONCZONE IDE NA OBIAD B)
+inline void RenderBuffer:: DeallocatePartial(uint32_t regionID, uint32_t removeOffset, uint32_t removeSize){
+    return;
+}
 
 inline void RenderBuffer::Reserve(int capacity) {
     if (capacity <= backBuffer.GetSize()) return;
@@ -175,18 +179,54 @@ inline int RenderBuffer::GetCapacity() const { return backBuffer.GetSize(); }
 
 inline int RenderBuffer::GetSize() const { return size; }
 
-inline uint32_t RenderBuffer::Size(uint32_t regionID) const { return (regionID < sizes.size()) ? sizes[regionID] : 0; }
+inline uint32_t RenderBuffer::Size(uint32_t regionID) const {
+    assert(regionID < sizes.size() && "Invalid regionID in Size()");
+    return sizes[regionID];
+}
 
-// TODO: Sprawdzanie poprawności zrobić assertem, dzięki temu będzie tylko w wersji debug.
 inline uint32_t RenderBuffer::Alignment(uint32_t regionID) const {
-    return (regionID < alignments.size()) ? alignments[regionID] : 0;
+    assert(regionID < alignments.size() && "Invalid regionID in Alignment()");
+    return alignments[regionID];
 }
 
 inline uint32_t RenderBuffer::Offset(uint32_t regionID) const {
-    return (regionID < offsets.size()) ? offsets[regionID] : 0;
+    assert(regionID < offsets.size() && "Invalid regionID in Offset()");
+    return offsets[regionID];
 }
 
 inline uint32_t RenderBuffer::GetPadding(uint32_t regionID, uint32_t previousEnd) const {
-    if (regionID >= alignments.size()) return 0;
+    assert(regionID < alignments.size() && "Invalid regionID in GetPadding()");
     return (alignments[regionID] - previousEnd % alignments[regionID]) % alignments[regionID];
+}
+
+// metoda read, która czyta dane z regionu render bufora
+inline void RenderBuffer::Read(uint32_t regionID, void *data, uint32_t dataSize, uint32_t readOffset) {
+    assert(regionID < sizes.size() && "Invalid regionID");
+    assert(data != nullptr && "Data pointer cannot be null");
+
+    // jezeli nie podany dataSize to czytaj caly region (idk czy tak ma byc, czy w ogóle) CHECK
+    if (dataSize == static_cast<uint32_t>(-1)) { 
+        dataSize = sizes[regionID];
+    }
+    assert(readOffset < sizes[regionID] && "Read offset larger than region size");
+    assert(readOffset + dataSize <= sizes[regionID] && "Read operation exceeds region boundaries");
+    uint32_t maxReadSize = sizes[regionID] - readOffset;  // mozemy czytać w regionie do końca ??????????? CHECK
+
+    // clamp
+    if (dataSize > maxReadSize) {
+        dataSize = maxReadSize;
+    }
+    // Skopiuj dane z frontBuffer (tego który jest aktualnie renderowany)
+    memcpy(data, backBuffer.GetMemory() + offsets[regionID] + readOffset, dataSize);
+}
+
+template <typename T> inline T RenderBuffer::Read(uint32_t regionID, uint32_t readOffset) {
+    assert(regionID < sizes.size() && "Invalid regionID");
+    assert(readOffset < sizes[regionID] && "Read offset larger than region size");
+    assert(readOffset + sizeof(T) <= sizes[regionID] && "Type T exceeds region boundaries");
+    
+    T result;
+    // se to uzywam 
+    Read(regionID, &result, sizeof(T), readOffset);
+    return result;
 }
