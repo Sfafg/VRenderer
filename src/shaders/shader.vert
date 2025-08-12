@@ -19,5 +19,5 @@ layout(location = 0) out vec4 col;
 
 void main() {
     gl_Position = viewProjection*model*vec4(aPosition.x, aPosition.y,0 ,1);
-    col = vec4(color[materialOffset]);
+    col = vec4(color[materialOffset]+0.1);
 }

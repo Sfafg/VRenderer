@@ -13,10 +13,7 @@ enum class NextUpdate {
 };
 
 class RenderBuffer {
-    // TODO: Dodać gettery i zmienić na private.
-    // TODO: Przenieść definicje do pliku cpp.
     // TODO: Umożliwić usuwanie dowolnej części regionu.
-    // TODO: Asserty by sprawdzić poprawność parametrów.
   private:
     std::vector<uint32_t> sizes;
     std::vector<uint32_t> alignments;
@@ -31,7 +28,7 @@ class RenderBuffer {
 
   public:
     RenderBuffer();
-    RenderBuffer(int capacity, vg::Flags<vg::BufferUsage> bufferUsage);
+    RenderBuffer(uint32_t capacity, vg::Flags<vg::BufferUsage> bufferUsage);
     RenderBuffer(RenderBuffer &&) = default;
     RenderBuffer &operator=(RenderBuffer &&) = default;
     RenderBuffer(const RenderBuffer &) = delete;
@@ -41,18 +38,27 @@ class RenderBuffer {
     operator vg::Buffer &();
     operator const vg::Buffer &() const;
 
-    uint32_t Allocate(int byteSize, int alignment);
-    uint32_t Reallocate(uint32_t regionID, int newByteSize);
-    void Deallocate(uint32_t regionID);
-    void DeallocatePartial(uint32_t regionID, uint32_t removeOffset, uint32_t removeSize);
-    void Reserve(int capacity);
+    uint32_t Allocate(uint32_t byteSize, uint32_t alignment);
+    uint32_t Reallocate(uint32_t regionID, uint32_t newByteSize);
+    void Deallocate(uint32_t regionID, uint32_t size = -1, uint32_t offset = 0);
+    void Reserve(uint32_t capacity);
 
     void Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset = 0);
     void Write(uint32_t regionID, const void *data);
     template <typename T> void Write(uint32_t regionID, const T &data, uint32_t writeOffset = 0);
 
-    // do sprawdzenia te implementacje
-    void Read(uint32_t regionID, void *data, uint32_t dataSize = -1, uint32_t readOffset = 0);
+    /**
+     * @brief Read portion of data from region, the user is responsible for allocation,
+     * if data is nullptr the function only returns viable read size.
+     *
+     * @param regionID
+     * @param data pointer to allocated data or nullptr
+     * @param maxReadSize maximum number of bytes to read
+     * @param readOffset byte offset inside of region
+     *
+     * @return number of bytes actually available to read or read.
+     */
+    uint32_t Read(uint32_t regionID, void *data, uint32_t maxReadSize = -1, uint32_t readOffset = 0);
     template <typename T> T Read(uint32_t regionID, uint32_t readOffset = 0);
 
     int GetCapacity() const;
@@ -61,172 +67,18 @@ class RenderBuffer {
     uint32_t Size(uint32_t regionID) const;
     uint32_t Alignment(uint32_t regionID) const;
     uint32_t Offset(uint32_t regionID) const;
-    uint32_t GetPadding(uint32_t regionID, uint32_t previousEnd) const;
+    uint32_t GetPadding(uint32_t regionID, uint32_t offset) const;
 
     friend class Renderer;
     friend class Material;
 };
 
-inline void RenderBuffer::Swap() {
-    std::swap(frontBuffer, backBuffer);
-    if (frontBuffer.GetSize() != backBuffer.GetSize()) {
-        backBuffer = vg::Buffer(frontBuffer.GetSize(), bufferUsage);
-        vg::Allocate(backBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
-    }
-    memcpy(backBuffer.GetMemory(), frontBuffer.GetMemory(), frontBuffer.GetSize());
-}
-
-inline RenderBuffer::RenderBuffer() {}
-
-inline RenderBuffer::RenderBuffer(int capacity, vg::Flags<vg::BufferUsage> bufferUsage)
-    : frontBuffer(capacity, bufferUsage), backBuffer(capacity, bufferUsage), size(0), bufferUsage(bufferUsage) {
-    vg::Allocate(frontBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
-    vg::Allocate(backBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
-}
-
-inline RenderBuffer::~RenderBuffer() {}
-
-inline RenderBuffer::operator vg::Buffer &() { return frontBuffer; }
-
-inline RenderBuffer::operator const vg::Buffer &() const { return frontBuffer; }
-
-inline uint32_t RenderBuffer::Allocate(int byteSize, int alignment) {
-    int currentSize = this->size;
-    int padding = (alignment - currentSize % alignment) % alignment;
-
-    size += padding + byteSize;
-    if (size >= backBuffer.GetSize()) Reserve(size);
-
-    sizes.reserve(10);
-    alignments.reserve(10);
-    offsets.reserve(10);
-    sizes.push_back(byteSize);
-    alignments.push_back(alignment);
-    offsets.push_back(currentSize + padding);
-
-    return sizes.size() - 1;
-}
-
-inline uint32_t RenderBuffer::Reallocate(uint32_t regionID, int newByteSize) {
-    // TO DO: Add case for shrinking.
-
-    if (regionID == offsets.size()) {
-        Deallocate(regionID);
-
-        return Allocate(newByteSize, alignments[regionID]);
-    }
-
-    uint32_t newRegion = Allocate(newByteSize, alignments[regionID]);
-    memcpy(backBuffer.MapMemory() + offsets[newRegion], backBuffer.MapMemory() + offsets[regionID], sizes[regionID]);
-
-    uint32_t offset = offsets[regionID];
-    if (regionID != 0) offset = offsets[regionID - 1] + sizes[regionID - 1];
-
-    for (auto i = regionID + 1; i < offsets.size(); i++) {
-        auto padding = (alignments[i] - offset % alignments[i]) % alignments[i];
-        offset += padding;
-
-        memcpy(backBuffer.MapMemory() + offset, backBuffer.MapMemory() + offsets[i], sizes[i]);
-
-        offsets[i] = offset;
-        offset += sizes[i];
-    }
-    size = offset;
-
-    return newRegion;
-}
-
-inline void RenderBuffer::Deallocate(uint32_t regionID) {
-    uint32_t offset = offsets[regionID];
-    if (regionID != 0) offset = offsets[regionID - 1 + sizes[regionID - 1]];
-
-    for (auto i = regionID + 1; i < offsets.size(); i++) {
-        auto padding = (alignments[i] - offset % alignments[i]) % alignments[i];
-        offset += padding;
-
-        memcpy(backBuffer.MapMemory() + offset, backBuffer.MapMemory() + offsets[i], sizes[i]);
-
-        offsets[i] = offset;
-        offset += sizes[i];
-    }
-    size = offset;
-}
-// TODO/TO DO NIEDOKONCZONE IDE NA OBIAD B)
-inline void RenderBuffer:: DeallocatePartial(uint32_t regionID, uint32_t removeOffset, uint32_t removeSize){
-    return;
-}
-
-inline void RenderBuffer::Reserve(int capacity) {
-    if (capacity <= backBuffer.GetSize()) return;
-
-    vg::Buffer newBuffer(capacity, bufferUsage);
-    vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
-    memcpy(newBuffer.MapMemory(), backBuffer.MapMemory(), backBuffer.GetSize());
-
-    std::swap(backBuffer, newBuffer);
-}
-
-inline void RenderBuffer::Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset) {
-    memcpy(backBuffer.GetMemory() + offsets[regionID] + writeOffset, data, dataSize);
-}
-inline void RenderBuffer::Write(uint32_t regionID, const void *data) { Write(regionID, data, sizes[regionID]); }
-
-template <typename T> inline void RenderBuffer::Write(uint32_t regionID, const T &data, uint32_t writeOffset) {
+template <typename T> void RenderBuffer::Write(uint32_t regionID, const T &data, uint32_t writeOffset) {
     Write(regionID, &data, sizeof(T), writeOffset);
 }
 
-inline int RenderBuffer::GetCapacity() const { return backBuffer.GetSize(); }
-
-inline int RenderBuffer::GetSize() const { return size; }
-
-inline uint32_t RenderBuffer::Size(uint32_t regionID) const {
-    assert(regionID < sizes.size() && "Invalid regionID in Size()");
-    return sizes[regionID];
-}
-
-inline uint32_t RenderBuffer::Alignment(uint32_t regionID) const {
-    assert(regionID < alignments.size() && "Invalid regionID in Alignment()");
-    return alignments[regionID];
-}
-
-inline uint32_t RenderBuffer::Offset(uint32_t regionID) const {
-    assert(regionID < offsets.size() && "Invalid regionID in Offset()");
-    return offsets[regionID];
-}
-
-inline uint32_t RenderBuffer::GetPadding(uint32_t regionID, uint32_t previousEnd) const {
-    assert(regionID < alignments.size() && "Invalid regionID in GetPadding()");
-    return (alignments[regionID] - previousEnd % alignments[regionID]) % alignments[regionID];
-}
-
-// metoda read, która czyta dane z regionu render bufora
-inline void RenderBuffer::Read(uint32_t regionID, void *data, uint32_t dataSize, uint32_t readOffset) {
-    assert(regionID < sizes.size() && "Invalid regionID");
-    assert(data != nullptr && "Data pointer cannot be null");
-
-    // jezeli nie podany dataSize to czytaj caly region (idk czy tak ma byc, czy w ogóle) CHECK
-    if (dataSize == static_cast<uint32_t>(-1)) { 
-        dataSize = sizes[regionID];
-    }
-    assert(readOffset < sizes[regionID] && "Read offset larger than region size");
-    assert(readOffset + dataSize <= sizes[regionID] && "Read operation exceeds region boundaries");
-    uint32_t maxReadSize = sizes[regionID] - readOffset;  // mozemy czytać w regionie do końca ??????????? CHECK
-
-    // clamp
-    if (dataSize > maxReadSize) {
-        dataSize = maxReadSize;
-    }
-    // Skopiuj dane z frontBuffer (tego który jest aktualnie renderowany)
-    memcpy(data, backBuffer.GetMemory() + offsets[regionID] + readOffset, dataSize);
-}
-
-template <typename T> inline T RenderBuffer::Read(uint32_t regionID, uint32_t readOffset) {
-    assert(regionID < sizes.size() && "Invalid regionID");
-    assert(readOffset < sizes[regionID] && "Read offset larger than region size");
-    assert(readOffset + sizeof(T) <= sizes[regionID] && "Type T exceeds region boundaries");
-    
+template <typename T> T RenderBuffer::Read(uint32_t regionID, uint32_t readOffset) {
     T result;
-    // se to uzywam 
     Read(regionID, &result, sizeof(T), readOffset);
     return result;
 }

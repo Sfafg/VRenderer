@@ -19,6 +19,7 @@ GLFWwindow *CreateWindow() {
     // glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     return glfwCreateWindow(1920, 1080, "VRendererTest", nullptr, nullptr);
 }
+
 vg::Queue generalQueue;
 vg::Device renderDevice;
 vg::SurfaceHandle InitVulkan(GLFWwindow *window) {

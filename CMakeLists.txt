@@ -12,13 +12,12 @@ set(SHADER_ROOT "${SRC_ROOT}/shaders")
 set(SHADER_OUTPUT_DIR "${RESOURCES_OUTPUT_DIR}/shaders")
 
 set(CMAKE_EXE_LINKER_FLAGS "-static")
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(ShowConsole FALSE)
 
 set(SRC
     ${SRC_ROOT}/Renderer.cpp
     ${SRC_ROOT}/Material.cpp
     ${SRC_ROOT}/Mesh.cpp
+    ${SRC_ROOT}/RenderBuffer.cpp
 )
 
 set(SHADERS
@@ -82,7 +81,6 @@ target_precompile_headers(VRenderer PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/
 target_include_directories(VRenderer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    # "${ECS_SOURCE_DIR}/src"
 )
 target_link_directories(VRenderer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/lib/"
@@ -105,7 +103,6 @@ target_precompile_headers(RendererTest PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inclu
 target_include_directories(RendererTest PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    # "${ECS_SOURCE_DIR}/src"
 )
 target_link_directories(RendererTest PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/lib/"

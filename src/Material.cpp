@@ -5,8 +5,8 @@
 Material::Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize)
     : variant(0) {
 
-    // TODO: Zrobić lepiej.
-    if (materialBuffer.backBuffer.GetSize() == 0) materialBuffer = RenderBuffer(16, vg::BufferUsage::StorageBuffer);
+    if ((vg::Buffer &)materialBuffer == vg::BufferHandle())
+        materialBuffer = RenderBuffer(16U, vg::BufferUsage::StorageBuffer);
 
     subpasses.emplace_back(std::move(subpass));
     dependecies.emplace_back(std::move(dependecy));
