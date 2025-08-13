@@ -1,6 +1,7 @@
 #include "glm/ext/quaternion_trigonometric.hpp"
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
@@ -10,7 +11,16 @@
 #include <glm/gtx/quaternion.hpp>
 #include <math.h>
 
-#include "RenderBuffer.h"
+
+
+float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (max - min) + min; }
+
+GLFWwindow *CreateWindow() {
+    glfwInit();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    // glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+    return glfwCreateWindow(1920, 1080, "VRendererTest", nullptr, nullptr);
+}
 
 vg::Queue generalQueue;
 vg::Device renderDevice;

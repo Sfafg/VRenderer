@@ -114,6 +114,46 @@ void RenderBuffer::Reserve(uint32_t capacity) {
     std::swap(backBuffer, newBuffer);
 }
 
+void RenderBuffer::Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOffset)   // TODO: spytac sie Slawka jak ma sie zachowywac
+// NOTE przy skrajnych nwm czy bedzie sie dobrze zachowywać, czy ma terminować czy co robić idk
+{
+    assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Erase()");
+    assert(eraseOffset + eraseSize <= sizes[regionID] && 
+           "eraseOffset + eraseSize exceeds region size in RenderBuffer::Erase()");
+    assert(eraseSize > 0 && "eraseSize must be greater than 0 in RenderBuffer::Erase()");
+
+    bufferChangeFlag.Set(BufferChange::Contents); // do czego to jest nwm 
+
+    uint32_t regionOffset = offsets[regionID];
+    uint32_t regionSize = sizes[regionID];
+    
+    if (eraseOffset + eraseSize < regionSize) {
+        uint32_t sourceOffset = regionOffset + eraseOffset + eraseSize;
+        uint32_t destOffset = regionOffset + eraseOffset;
+        uint32_t moveSize = regionSize - (eraseOffset + eraseSize);
+        
+        memmove(backBuffer.MapMemory() + destOffset, 
+                backBuffer.MapMemory() + sourceOffset, 
+                moveSize);
+    }
+
+    sizes[regionID] -= eraseSize;
+    uint32_t currentOffset = offsets[regionID] + sizes[regionID];
+
+    for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
+        uint32_t padding = GetPadding(i, currentOffset);
+        currentOffset += padding;
+        
+        memmove(backBuffer.MapMemory() + currentOffset,
+                backBuffer.MapMemory() + offsets[i],
+                sizes[i]);
+        
+        // Aktualizuj offset regionu
+        offsets[i] = currentOffset;
+        currentOffset += sizes[i];
+    }
+}
+
 void RenderBuffer::Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset) {
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Write()");
     assert(data && "Null data pointer in RenderBuffer::Write()");
