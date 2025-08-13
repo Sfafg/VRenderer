@@ -12,9 +12,12 @@ enum class NextUpdate {
     NextFrame,
 };
 
+enum class BufferChange { None = 0, Contents, Size };
+
 class RenderBuffer {
-    // TODO: Umożliwić usuwanie dowolnej części regionu.
+    // TODO: Umożliwić usuwanie dowolnej części regionu poprzez erase, które zmniejsza rozmiar regionu.
     // TODO: Automatyczne updatowanie descriptorów.
+
   private:
     std::vector<uint32_t> sizes;
     std::vector<uint32_t> alignments;
@@ -24,8 +27,9 @@ class RenderBuffer {
     vg::Flags<vg::BufferUsage> bufferUsage;
     vg::Buffer frontBuffer; // Rendered to.
     vg::Buffer backBuffer;  // Written to.
+    vg::Flags<BufferChange> bufferChangeFlag;
 
-    void Swap();
+    bool Swap();
 
   public:
     RenderBuffer();
@@ -64,6 +68,7 @@ class RenderBuffer {
 
     int GetCapacity() const;
     int GetSize() const;
+    vg::Flags<BufferChange> GetChange() const;
 
     uint32_t Size(uint32_t regionID) const;
     uint32_t Alignment(uint32_t regionID) const;

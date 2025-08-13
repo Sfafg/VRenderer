@@ -1,12 +1,24 @@
 #include "RenderBuffer.h"
 
-void RenderBuffer::Swap() {
+bool RenderBuffer::Swap() {
     std::swap(frontBuffer, backBuffer);
-    if (frontBuffer.GetSize() != backBuffer.GetSize()) {
+
+    if (bufferChangeFlag.IsSet(BufferChange::Size)) {
         backBuffer = vg::Buffer(frontBuffer.GetSize(), bufferUsage);
         vg::Allocate(backBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
+
+        memcpy(backBuffer.MapMemory(), frontBuffer.MapMemory(), frontBuffer.GetSize());
+        bufferChangeFlag = 0;
+
+        return true;
     }
-    memcpy(backBuffer.MapMemory(), frontBuffer.MapMemory(), frontBuffer.GetSize());
+
+    if (bufferChangeFlag.IsSet(BufferChange::Contents))
+        memcpy(backBuffer.MapMemory(), frontBuffer.MapMemory(), frontBuffer.GetSize());
+
+    bufferChangeFlag = 0;
+
+    return false;
 }
 
 RenderBuffer::RenderBuffer() {}
@@ -24,6 +36,7 @@ RenderBuffer::operator vg::Buffer &() { return frontBuffer; }
 RenderBuffer::operator const vg::Buffer &() const { return frontBuffer; }
 
 uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment) {
+    bufferChangeFlag.Set(BufferChange::Contents);
     int currentSize = this->size;
     int padding = (alignment - currentSize % alignment) % alignment;
 
@@ -69,6 +82,8 @@ uint32_t RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
 void RenderBuffer::Deallocate(uint32_t regionID, uint32_t size, uint32_t offset) {
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Deallocate()");
     assert(size + offset <= sizes[regionID] && "size + offset larger than region size in RenderBuffer::Deallocate()");
+    bufferChangeFlag.Set(BufferChange::Contents);
+
     uint32_t writeOffset = offsets[regionID];
     if (regionID != 0) writeOffset = offsets[regionID - 1 + sizes[regionID - 1]];
 
@@ -90,6 +105,7 @@ void RenderBuffer::Deallocate(uint32_t regionID, uint32_t size, uint32_t offset)
 
 void RenderBuffer::Reserve(uint32_t capacity) {
     if (capacity <= backBuffer.GetSize()) return;
+    bufferChangeFlag.Set(BufferChange::Size);
 
     vg::Buffer newBuffer(capacity, bufferUsage);
     vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
@@ -105,6 +121,7 @@ void RenderBuffer::Write(uint32_t regionID, const void *data, uint32_t dataSize,
         dataSize + writeOffset <= sizes[regionID] &&
         "dataSize + writeOffset larger than region size in RenderBuffer::Write()"
     );
+    bufferChangeFlag.Set(BufferChange::Contents);
     memcpy(backBuffer.MapMemory() + offsets[regionID] + writeOffset, data, dataSize);
 }
 
@@ -124,6 +141,8 @@ uint32_t RenderBuffer::Read(uint32_t regionID, void *data, uint32_t maximumReadS
 int RenderBuffer::GetCapacity() const { return backBuffer.GetSize(); }
 
 int RenderBuffer::GetSize() const { return size; }
+
+vg::Flags<BufferChange> RenderBuffer::GetChange() const { return bufferChangeFlag; }
 
 uint32_t RenderBuffer::Size(uint32_t regionID) const {
     assert(regionID < sizes.size() && "Invalid regionID in Size()");
