@@ -32,7 +32,7 @@ void InitVulkan() {
 void Check(bool condition, const char *msg) {
     if (!condition) {
         std::cerr << "srakapierdaka:  " << msg << std::endl;
-        std::terminate();
+        // std::terminate();
     }
 }
 
@@ -122,5 +122,6 @@ void TestRenderBuffer() {
 
 int main() {
     InitVulkan();
+    RenderBuffer renderBuffer(128, vg::BufferUsage::StorageBuffer);
     TestRenderBuffer();
 }

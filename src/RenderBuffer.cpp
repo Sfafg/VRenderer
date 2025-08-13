@@ -6,7 +6,7 @@ void RenderBuffer::Swap() {
         backBuffer = vg::Buffer(frontBuffer.GetSize(), bufferUsage);
         vg::Allocate(backBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
     }
-    memcpy(backBuffer.MapMemory(), frontBuffer.GetMemory(), frontBuffer.GetSize());
+    memcpy(backBuffer.MapMemory(), frontBuffer.MapMemory(), frontBuffer.GetSize());
 }
 
 RenderBuffer::RenderBuffer() {}
