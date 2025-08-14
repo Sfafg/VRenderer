@@ -15,7 +15,7 @@ enum class NextUpdate {
 enum class BufferChange { None = 0, Contents, Size };
 
 class RenderBuffer {
-    // TODO: Umożliwić usuwanie dowolnej części regionu poprzez erase, które zmniejsza rozmiar regionu.
+    // TODO: Umożliwić usuwanie dowolnej części regionu poprzez erase, które zmniejsza rozmiar regionu. ZROBIONE (prawie?)
     // TODO: Automatyczne updatowanie descriptorów.
 
   private:
@@ -46,6 +46,7 @@ class RenderBuffer {
     uint32_t Allocate(uint32_t byteSize, uint32_t alignment);
     uint32_t Reallocate(uint32_t regionID, uint32_t newByteSize);
     void Deallocate(uint32_t regionID, uint32_t size = -1, uint32_t offset = 0);
+    void Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOffset = 0);
     void Reserve(uint32_t capacity);
 
     void Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset = 0);
