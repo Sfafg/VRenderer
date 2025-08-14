@@ -54,7 +54,7 @@ void TestRenderBuffer() {
     RenderBuffer rb(initialCapacity, vg::BufferUsage::VertexBuffer);
     Check(rb.GetCapacity() >= initialCapacity, "Niepoprawna początkowa pojemność");
     Check(rb.GetCapacity() >= initialCapacity, "zle przypisuje pojemnosc");
-    Check(rb.GetSize() == 0, "poczatkowy rozmiar ma byc 0 nigga");
+    Check(rb.GetSize() == 0, "poczatkowy rozmiar ma byc 0");
 
     auto region = rb.Allocate(allocSize, alignment);
 
