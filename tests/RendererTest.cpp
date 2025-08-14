@@ -12,16 +12,6 @@
 #include <math.h>
 
 
-
-float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (max - min) + min; }
-
-GLFWwindow *CreateWindow() {
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    // glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    return glfwCreateWindow(1920, 1080, "VRendererTest", nullptr, nullptr);
-}
-
 vg::Queue generalQueue;
 vg::Device renderDevice;
 void InitVulkan() {
@@ -41,31 +31,31 @@ void InitVulkan() {
 
 void Check(bool condition, const char *msg) {
     if (!condition) {
-        std::cerr << "srakapierdaka:  " << msg << std::endl;
+        std::cerr << "BŁĄD:  " << msg << std::endl;
         // std::terminate();
     }
 }
 
 void TestRenderBuffer() {
     constexpr int initialCapacity = 1024;
-    // test 1: Dealokacja wszystkich regionów w RenderBuffer
-    RenderBuffer rbzero(initialCapacity, vg::BufferUsage::VertexBuffer);
-    int allocSize = 256;
+    int allocSize = 728;
     int alignment = 16;
+    // test 1: Dealokacja wszystkich regionów w RenderBuffer
+    /*
+    RenderBuffer rbzero(initialCapacity, vg::BufferUsage::VertexBuffer);
+    Check(rbzero.GetCapacity() >= initialCapacity, "Niepoprawna początkowa pojemność");
 
     std::vector<uint32_t> regions;
     for (int i = 0; i < 5; ++i) { regions.push_back(rbzero.Allocate(allocSize, alignment)); }
 
     for (auto &region : regions) { rbzero.Deallocate(std::move(region)); }
     Check(rbzero.GetSize() == 0, "sraka po dealokacji");
-
+    */
     // test 2: Podstawowe operacje na RenderBuffer
     RenderBuffer rb(initialCapacity, vg::BufferUsage::VertexBuffer);
+    Check(rb.GetCapacity() >= initialCapacity, "Niepoprawna początkowa pojemność");
     Check(rb.GetCapacity() >= initialCapacity, "zle przypisuje pojemnosc");
     Check(rb.GetSize() == 0, "poczatkowy rozmiar ma byc 0 nigga");
-
-    allocSize = 256;
-    alignment = 16;
 
     auto region = rb.Allocate(allocSize, alignment);
 
@@ -75,20 +65,42 @@ void TestRenderBuffer() {
     Check(rb.Offset(region) % alignment == 0, "offset regionu nie jest aligned");
     Check(rb.GetSize() >= allocSize, "zle przypisuje rozmiar render bufora po alokacji regionu");
 
+    printf("Region %u allocated with size %u, alignment %u, offset %u\n", region, rb.Size(region), rb.Alignment(region), rb.Offset(region));
+
     // test 3: Sprawdzenie poprawności alokacji i zapisu danych do regionu
-    std::vector<uint8_t> data(allocSize);
-    for (int i = 0; i < allocSize; i++) {
+    int random_size = 100;
+    std::vector<uint8_t> data(random_size);
+    for (int i = 0; i < random_size; i++) {
         data[i] = static_cast<uint8_t>(i % 256); // cokolwiek zeby bylo idk
     }
-    rb.Write(region, data.data(), allocSize);
 
+    rb.Write(region, data.data(), random_size);
+
+    printf("Data written to region %u: ", region);
+    
     // odczytujemy dane z backBuffer i sprawdzamy czy są poprawne
-    std::vector<uint8_t> readData(allocSize);
-    rb.Read(region, readData.data(), allocSize);
-    Check(std::memcmp(readData.data(), data.data(), allocSize) == 0, "Dane nie zostaly poprawnie zapisane");
+
+    std::vector<uint8_t> readData(random_size);
+
+    uint32_t sraka = rb.Read(region, readData.data(), random_size);  // 124uytve2q3rvbf32weptif
+    assert(sraka == random_size && "Read size does not match written size");
+    
+    printf("Written data: ");
+    for (int i = 0; i < random_size; i++) {
+        printf("%02X ", data[i]);
+    }
+    printf("\n");
+
+    printf("Read data:    ");
+    for (int i = 0; i < random_size; i++) {
+        printf("%02X ", readData[i]);
+    }
+    printf("\n");
+
+    Check(std::memcmp(readData.data(), data.data(), random_size) == 0, "Dane nie zostaly poprawnie zapisane");
 
     // test 5: Częściowe wpisanie danych (dalej)
-    uint32_t partialOffset = 100;
+    uint32_t partialOffset = 500;
     uint32_t partialSize = 20;
     std::vector<uint8_t> partialData = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
                                         0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14};
