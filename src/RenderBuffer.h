@@ -15,7 +15,8 @@ enum class NextUpdate {
 enum class BufferChange { None = 0, Contents, Size };
 
 class RenderBuffer {
-    // TODO: Umożliwić usuwanie dowolnej części regionu poprzez erase, które zmniejsza rozmiar regionu. ZROBIONE (prawie?)
+    // TODO: Umożliwić usuwanie dowolnej części regionu poprzez erase, które zmniejsza rozmiar regionu. ZROBIONE
+    // (prawie?)
     // TODO: Automatyczne updatowanie descriptorów.
 
   private:
@@ -51,7 +52,9 @@ class RenderBuffer {
 
     void Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset = 0);
     void Write(uint32_t regionID, const void *data);
-    template <typename T> void Write(uint32_t regionID, const T &data, uint32_t writeOffset = 0);
+    template <typename T>
+        requires(!std::is_pointer_v<T>)
+    void Write(uint32_t regionID, const T &data, uint32_t writeOffset = 0);
 
     /**
      * @brief Read portion of data from region, the user is responsible for allocation,
@@ -80,7 +83,9 @@ class RenderBuffer {
     friend class Material;
 };
 
-template <typename T> void RenderBuffer::Write(uint32_t regionID, const T &data, uint32_t writeOffset) {
+template <typename T>
+    requires(!std::is_pointer_v<T>)
+void RenderBuffer::Write(uint32_t regionID, const T &data, uint32_t writeOffset) {
     Write(regionID, &data, sizeof(T), writeOffset);
 }
 

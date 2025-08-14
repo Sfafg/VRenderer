@@ -11,7 +11,6 @@
 #include <glm/gtx/quaternion.hpp>
 #include <math.h>
 
-
 vg::Queue generalQueue;
 vg::Device renderDevice;
 void InitVulkan() {
@@ -65,7 +64,10 @@ void TestRenderBuffer() {
     Check(rb.Offset(region) % alignment == 0, "offset regionu nie jest aligned");
     Check(rb.GetSize() >= allocSize, "zle przypisuje rozmiar render bufora po alokacji regionu");
 
-    printf("Region %u allocated with size %u, alignment %u, offset %u\n", region, rb.Size(region), rb.Alignment(region), rb.Offset(region));
+    printf(
+        "Region %u allocated with size %u, alignment %u, offset %u\n", region, rb.Size(region), rb.Alignment(region),
+        rb.Offset(region)
+    );
 
     // test 3: Sprawdzenie poprawności alokacji i zapisu danych do regionu
     int random_size = 100;
@@ -77,24 +79,20 @@ void TestRenderBuffer() {
     rb.Write(region, data.data(), random_size);
 
     printf("Data written to region %u: ", region);
-    
+
     // odczytujemy dane z backBuffer i sprawdzamy czy są poprawne
 
     std::vector<uint8_t> readData(random_size);
 
-    uint32_t sraka = rb.Read(region, readData.data(), random_size);  // 124uytve2q3rvbf32weptif
+    uint32_t sraka = rb.Read(region, readData.data(), random_size); // 124uytve2q3rvbf32weptif
     assert(sraka == random_size && "Read size does not match written size");
-    
+
     printf("Written data: ");
-    for (int i = 0; i < random_size; i++) {
-        printf("%02X ", data[i]);
-    }
+    for (int i = 0; i < random_size; i++) { printf("%02X ", data[i]); }
     printf("\n");
 
     printf("Read data:    ");
-    for (int i = 0; i < random_size; i++) {
-        printf("%02X ", readData[i]);
-    }
+    for (int i = 0; i < random_size; i++) { printf("%02X ", readData[i]); }
     printf("\n");
 
     Check(std::memcmp(readData.data(), data.data(), random_size) == 0, "Dane nie zostaly poprawnie zapisane");
