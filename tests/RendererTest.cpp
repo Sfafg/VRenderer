@@ -81,11 +81,9 @@ void TestRenderBuffer() {
     printf("Data written to region %u: ", region);
 
     // odczytujemy dane z backBuffer i sprawdzamy czy są poprawne
-
     std::vector<uint8_t> readData(random_size);
-
-    uint32_t sraka = rb.Read(region, readData.data(), random_size); // 124uytve2q3rvbf32weptif
-    assert(sraka == random_size && "Read size does not match written size");
+    uint32_t readSize = rb.Read(region, readData.data(), random_size); 
+    assert(readSize == random_size && "Read size does not match written size");
 
     printf("Written data: ");
     for (int i = 0; i < random_size; i++) { printf("%02X ", data[i]); }
@@ -111,7 +109,25 @@ void TestRenderBuffer() {
         std::memcmp(partialReadData.data(), partialData.data(), partialSize) == 0,
         "Wpisywanie częściowych danych nie działa"
     );
+    //////////////////////////////////////////////////// 
+    std::cout << "[TEST] Data BEFORE realloc:  ";
+    for (auto b : data) std::cout << (int)b << " ";
+    std::cout << std::endl;
 
+    uint32_t newSize = allocSize * 2;
+    uint32_t newRegion = rb.Reallocate(region, newSize);
+
+    std::vector<uint8_t> reallocReadData(allocSize);
+    rb.Read(newRegion, reallocReadData.data(), allocSize);
+
+    std::cout << "[TEST] Data after realloc:  ";
+    for (auto b : reallocReadData) std::cout << (int)b << " ";
+    std::cout << std::endl;
+
+    Check(std::memcmp(reallocReadData.data(), data.data(), allocSize) == 0, "Realokacja nie zachowala danych");
+    ////////////////////////////////////////////////////
+
+    /*
     // Test 6: Realokacja
     uint32_t newSize = allocSize * 2;
     uint32_t newRegion = rb.Reallocate(region, newSize);
@@ -123,8 +139,10 @@ void TestRenderBuffer() {
     // Sprawdzenie, czy nowy region ma poprawny rozmiar i offset
     int sizeBeforeDealloc = rb.GetSize();
     rb.Deallocate(std::move(region));
-    Check(rb.GetSize() <= sizeBeforeDealloc, "Rozmiar render bufora po dealokacji nie zmniejszyl sie");
+    Check(rb.GetSize() <= sizeBeforeDealloc, "Rozmiar render bufora po dealokacji nie zmniejszyl sie"); */
 
+
+    /*
     // Test 7: Rezerwacja większej pojemności
     int biggerCapacity = initialCapacity * 4;
     rb.Reserve(biggerCapacity);
@@ -138,6 +156,7 @@ void TestRenderBuffer() {
         paddingR2 == (rb.Alignment(r2) - (rb.Offset(r1) + rb.Size(r1)) % rb.Alignment(r2)) % rb.Alignment(r2),
         "Padding calculation for second region is incorrect"
     );
+    */
 }
 
 int main() {

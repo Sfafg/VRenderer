@@ -52,31 +52,40 @@ uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment) {
 
 uint32_t RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Reallocate()");
+    assert (newByteSize > 0 && "New byte size must be greater than 0 in RenderBuffer::Reallocate(), to deallocate use Deallocate()");
 
-    // TO DO: Add case for shrinking.
     if (regionID == offsets.size()) {
         Deallocate(regionID);
         return Allocate(newByteSize, alignments[regionID]);
     }
+    uint32_t oldSize = sizes[regionID];
+    int32_t delta = static_cast<int32_t>(newByteSize) - static_cast<int32_t>(oldSize);
 
-    uint32_t newRegion = Allocate(newByteSize, alignments[regionID]);
-    memcpy(backBuffer.MapMemory() + offsets[newRegion], backBuffer.MapMemory() + offsets[regionID], sizes[regionID]);
+    if (delta == 0) return regionID; // No change needed.
 
-    uint32_t offset = offsets[regionID];
-    if (regionID != 0) offset = offsets[regionID - 1] + sizes[regionID - 1];
+    char* mem = backBuffer.MapMemory();
 
-    for (auto i = regionID + 1; i < offsets.size(); i++) {
-        auto padding = (alignments[i] - offset % alignments[i]) % alignments[i];
-        offset += padding;
-
-        memcpy(backBuffer.MapMemory() + offset, backBuffer.MapMemory() + offsets[i], sizes[i]);
-
-        offsets[i] = offset;
-        offset += sizes[i];
+    if (delta > 0) { // expanding
+        for (int i = static_cast<int>(sizes.size()) - 1; i > static_cast<int>(regionID); i--) {
+            uint32_t srcOffset = offsets[i];
+            uint32_t dstOffset = srcOffset + delta;
+            memmove(mem + dstOffset, mem + srcOffset, sizes[i]);
+            offsets[i] = dstOffset;
+        }
+    } else { // shrinking
+        for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
+            uint32_t srcOffset = offsets[i];
+            uint32_t dstOffset = srcOffset + delta;
+            memmove(mem + dstOffset, mem + srcOffset, sizes[i]);
+            offsets[i] = dstOffset;
+        }
     }
-    size = offset;
 
-    return newRegion;
+    sizes[regionID] = newByteSize;
+    size = static_cast<uint32_t>(static_cast<int32_t>(size) + delta);
+
+    bufferChangeFlag.Set(BufferChange::Contents);
+    return regionID;
 }
 
 void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region 
