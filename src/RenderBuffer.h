@@ -18,6 +18,7 @@ class RenderBuffer {
     // TODO: Umożliwić usuwanie dowolnej części regionu poprzez erase, które zmniejsza rozmiar regionu. ZROBIONE
     // (prawie?)
     // TODO: Automatyczne updatowanie descriptorów.
+    // TODO: Reallocate nie zmienia indeksu regionu więc powinien zwracać void.
 
   private:
     std::vector<uint32_t> sizes;

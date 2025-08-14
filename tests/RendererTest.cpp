@@ -82,7 +82,7 @@ void TestRenderBuffer() {
 
     // odczytujemy dane z backBuffer i sprawdzamy czy są poprawne
     std::vector<uint8_t> readData(random_size);
-    uint32_t readSize = rb.Read(region, readData.data(), random_size); 
+    uint32_t readSize = rb.Read(region, readData.data(), random_size);
     assert(readSize == random_size && "Read size does not match written size");
 
     printf("Written data: ");
@@ -109,12 +109,12 @@ void TestRenderBuffer() {
         std::memcmp(partialReadData.data(), partialData.data(), partialSize) == 0,
         "Wpisywanie częściowych danych nie działa"
     );
-    //////////////////////////////////////////////////// 
+    ////////////////////////////////////////////////////
     std::cout << "[TEST] Data BEFORE realloc:  ";
     for (auto b : data) std::cout << (int)b << " ";
     std::cout << std::endl;
 
-    uint32_t newSize = allocSize * 2;
+    uint32_t newSize = allocSize * 1.1;
     uint32_t newRegion = rb.Reallocate(region, newSize);
 
     std::vector<uint8_t> reallocReadData(allocSize);
@@ -140,7 +140,6 @@ void TestRenderBuffer() {
     int sizeBeforeDealloc = rb.GetSize();
     rb.Deallocate(std::move(region));
     Check(rb.GetSize() <= sizeBeforeDealloc, "Rozmiar render bufora po dealokacji nie zmniejszyl sie"); */
-
 
     /*
     // Test 7: Rezerwacja większej pojemności
