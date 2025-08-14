@@ -46,7 +46,7 @@ class RenderBuffer {
 
     uint32_t Allocate(uint32_t byteSize, uint32_t alignment);
     uint32_t Reallocate(uint32_t regionID, uint32_t newByteSize);
-    void Deallocate(uint32_t regionID, uint32_t size = -1, uint32_t offset = 0);
+    void Deallocate(uint32_t regionID);
     void Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOffset = 0);
     void Reserve(uint32_t capacity);
 

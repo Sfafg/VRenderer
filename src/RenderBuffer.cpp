@@ -79,16 +79,15 @@ uint32_t RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
     return newRegion;
 }
 
-void RenderBuffer::Deallocate(uint32_t regionID, uint32_t size, uint32_t offset) {
+void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region 
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Deallocate()");
-    assert(size + offset <= sizes[regionID] && "size + offset larger than region size in RenderBuffer::Deallocate()");
     bufferChangeFlag.Set(BufferChange::Contents);
 
     uint32_t writeOffset = offsets[regionID];
-    if (regionID != 0) writeOffset = offsets[regionID - 1 + sizes[regionID - 1]];
-
-    for (auto i = regionID + 1; i < offsets.size(); i++) {
-        auto padding = GetPadding(i, writeOffset);
+    uint32_t removedSize = sizes[regionID];
+    
+    for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
+        uint32_t padding = GetPadding(i, writeOffset);
         writeOffset += padding;
 
         memcpy(backBuffer.MapMemory() + writeOffset, backBuffer.MapMemory() + offsets[i], sizes[i]);
@@ -96,12 +95,18 @@ void RenderBuffer::Deallocate(uint32_t regionID, uint32_t size, uint32_t offset)
         offsets[i] = writeOffset;
         writeOffset += sizes[i];
     }
-    size = writeOffset;
+    sizes.erase(sizes.begin() + regionID);
+    offsets.erase(offsets.begin() + regionID);
+    alignments.erase(alignments.begin() + regionID);
+
+    //Korekta offsetów 
+    for (uint32_t i = regionID; i < offsets.size(); ++i) {
+        if (i == 0){
+            continue;
+        } 
+        offsets[i] = offsets[i - 1] + sizes[i - 1] + GetPadding(i, offsets[i - 1] + sizes[i - 1]);
+    }
 }
-// TODO/TO DO NIEDOKONCZONE IDE NA OBIAD B) nie rób z tego osobnej funkcji, dodaj do deallocate offset i rozmiar
-// dealokacji, które defaultowo są 0 i -1, bo logika będzie prawie taka sama, zrobiłem deklaracje ale musisz skończyć
-// implementacje. A jednak nie wiem czy tego by się nie przydało dać do reallocate, tylko że offset tam nie pasuje, więc
-// jakas funkcja do kopiowania danych??? Nie wiem, trzeba się zastanowić.
 
 void RenderBuffer::Reserve(uint32_t capacity) {
     if (capacity <= backBuffer.GetSize()) return;
@@ -120,8 +125,7 @@ void RenderBuffer::Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOf
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Erase()");
     assert(eraseOffset + eraseSize <= sizes[regionID] && 
            "eraseOffset + eraseSize exceeds region size in RenderBuffer::Erase()");
-    assert(eraseSize > 0 && "eraseSize must be greater than 0 in RenderBuffer::Erase()");
-
+    assert(eraseSize > 0 && "eraseSize must be greater than 0 in RenderBuffer::Erase()"); 
     bufferChangeFlag.Set(BufferChange::Contents); // do czego to jest nwm 
 
     uint32_t regionOffset = offsets[regionID];
