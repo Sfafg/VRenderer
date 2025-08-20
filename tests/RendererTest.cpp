@@ -1,7 +1,6 @@
 #include "glm/ext/quaternion_trigonometric.hpp"
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
@@ -10,6 +9,16 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <math.h>
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+extern "C" {
+typedef struct VkInstance_T *VkInstance;
+typedef struct VkSurfaceKHR_T *VkSurfaceKHR;
+int glfwCreateWindowSurface(VkInstance instance, GLFWwindow *window, const void *allocator, VkSurfaceKHR *surface);
+}
+#include "RenderBuffer.h"
+
+float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (max - min) + min; }
 
 vg::Queue generalQueue;
 vg::Device renderDevice;
@@ -19,9 +28,13 @@ void InitVulkan() {
         std::cout << message << '\n';
     });
 
+    vg::DeviceFeatures deviceFeatures(
+        {vg::Feature::LogicOp, vg::Feature::SampleRateShading, vg::Feature::FillModeNonSolid,
+         vg::Feature::MultiDrawIndirect}
+    );
     generalQueue = vg::Queue({vg::QueueType::Transfer}, 1.0f);
     renderDevice = vg::Device(
-        {&generalQueue}, {}, vg::DeviceFeatures(),
+        {&generalQueue}, {}, deviceFeatures,
         [](auto id, auto supportedQueues, auto supportedExtensions, auto type, vg::DeviceLimits limits,
            vg::DeviceFeatures features) { return (type == vg::DeviceType::Dedicated); }
     );

@@ -8,7 +8,7 @@ layout(push_constant) uniform PushConstants {
     int materialOffset;
 };
 
-layout(set = 0, binding = 1) buffer MaterialData {
+layout(set = 0, binding = 1) readonly buffer MaterialData {
     float color[];
 };
 

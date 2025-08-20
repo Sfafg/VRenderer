@@ -108,6 +108,8 @@ void Renderer::StartFrame() {
 }
 
 void Renderer::Draw(const Mesh &mesh, const Material &material, const vg::Buffer &instanceBuffer, int instanceCount) {
+    int s = renderMeshes.size();
+    int s1 = renderMeshes[material.variant].size();
     renderMeshes[material.index][material.variant].push_back(&mesh);
     instanceBuffers[material.index][material.variant].push_back(&instanceBuffer);
     Renderer::instanceCount[material.index][material.variant].push_back(instanceCount);
@@ -126,10 +128,12 @@ void Renderer::EndFrame() {
         for (int j = 0; j < variantCount; j++) {
             if (renderMeshes[i][j].size() == 0) continue;
             if (Material::materialBuffer.sizes[i] != 0)
-                commandBuffer[frameIndex].Append(cmd::PushConstants(
-                    renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
-                    Material::materialBuffer.offsets[i] / Material::materialBuffer.alignments[i] + j
-                ));
+                commandBuffer[frameIndex].Append(
+                    cmd::PushConstants(
+                        renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
+                        Material::materialBuffer.offsets[i] / Material::materialBuffer.alignments[i] + j
+                    )
+                );
 
             for (auto &&mesh : renderMeshes[i][j]) {
                 auto d = mesh->GetMeshMetaData();

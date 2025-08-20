@@ -1,7 +1,13 @@
 #include "glm/ext/quaternion_trigonometric.hpp"
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+extern "C" {
+typedef struct VkInstance_T *VkInstance;
+typedef struct VkSurfaceKHR_T *VkSurfaceKHR;
+int glfwCreateWindowSurface(VkInstance instance, GLFWwindow *window, const void *allocator, VkSurfaceKHR *surface);
+}
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
@@ -23,8 +29,10 @@ GLFWwindow *CreateWindow() {
 vg::Queue generalQueue;
 vg::Device renderDevice;
 vg::SurfaceHandle InitVulkan(GLFWwindow *window) {
+    uint32_t glfwExtensionCount = 0;
+    const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     vg::instance =
-        vg::Instance({"VK_KHR_surface", "VK_KHR_win32_surface"}, [](vg::MessageSeverity severity, const char *message) {
+        vg::Instance({glfwExtensions, glfwExtensionCount}, [](vg::MessageSeverity severity, const char *message) {
             if (severity < vg::MessageSeverity::Warning) return;
             // TODO: Zrobić żeby errory były bardziej kompaktowe np.
             // Validation Error: [ VUID-vkCmdDrawIndexed-None-08114 ] Object 0: handle = 0x2cfba2000000001c, type =
@@ -48,7 +56,10 @@ vg::SurfaceHandle InitVulkan(GLFWwindow *window) {
             std::cout << message << '\n' << '\n';
         });
 
-    vg::SurfaceHandle windowSurface = vg::Window::CreateWindowSurface(vg::instance, window);
+    vg::SurfaceHandle windowSurface;
+    glfwCreateWindowSurface(
+        *(VkInstance *)&vg::instance, (GLFWwindow *)window, nullptr, (VkSurfaceKHR *)&windowSurface
+    );
     vg::DeviceFeatures deviceFeatures(
         {vg::Feature::LogicOp, vg::Feature::SampleRateShading, vg::Feature::FillModeNonSolid,
          vg::Feature::MultiDrawIndirect}
