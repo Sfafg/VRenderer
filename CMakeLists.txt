@@ -95,6 +95,7 @@ if(BUILD_TESTS1)
       CMAKE_CACHE_ARGS
         -DGLFW_BUILD_WAYLAND:BOOL=ON
         -DGLFW_BUILD_X11:BOOL=OFF
+        -DGLFW_BUILD_DOCS:BOOL=OFF
     )
     FetchContent_MakeAvailable(glfw)
 
