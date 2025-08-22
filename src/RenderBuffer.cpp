@@ -1,39 +1,35 @@
 #include "RenderBuffer.h"
 
-bool RenderBuffer::Swap() {
-    std::swap(frontBuffer, backBuffer);
-
-    if (bufferChangeFlag.IsSet(BufferChange::Size)) {
-        backBuffer = vg::Buffer(frontBuffer.GetSize(), bufferUsage);
-        vg::Allocate(backBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
-
-        memcpy(backBuffer.MapMemory(), frontBuffer.MapMemory(), frontBuffer.GetSize());
-        bufferChangeFlag = 0;
-
-        return true;
-    }
-
-    if (bufferChangeFlag.IsSet(BufferChange::Contents))
-        memcpy(backBuffer.MapMemory(), frontBuffer.MapMemory(), frontBuffer.GetSize());
-
-    bufferChangeFlag = 0;
-
-    return false;
-}
-
 RenderBuffer::RenderBuffer() {}
 
 RenderBuffer::RenderBuffer(uint32_t capacity, vg::Flags<vg::BufferUsage> bufferUsage)
-    : frontBuffer(capacity, bufferUsage), backBuffer(capacity, bufferUsage), size(0), bufferUsage(bufferUsage) {
-    vg::Allocate(frontBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
-    vg::Allocate(backBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+    : renderingBuffer{vg::Buffer(capacity, bufferUsage), vg::Buffer(capacity, bufferUsage)},
+      stagingBuffer(capacity, bufferUsage), size(0), bufferUsage(bufferUsage) {
+    vg::Allocate(renderingBuffer[0], {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+    vg::Allocate(renderingBuffer[1], {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+    vg::Allocate(stagingBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
 }
 
 RenderBuffer::~RenderBuffer() {}
 
-RenderBuffer::operator vg::Buffer &() { return frontBuffer; }
+bool RenderBuffer::FlushBuffer(int index) {
+    bufferChangeFlag = 0;
+    if (stagingBuffer.GetSize() != renderingBuffer[index].GetSize()) {
+        vg::Buffer newBuffer(stagingBuffer.GetSize(), bufferUsage);
+        vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
 
-RenderBuffer::operator const vg::Buffer &() const { return frontBuffer; }
+        std::swap(renderingBuffer[index], newBuffer);
+        memcpy(renderingBuffer[index].MapMemory(), stagingBuffer.MapMemory(), stagingBuffer.GetSize());
+
+        return true;
+    }
+    memcpy(renderingBuffer[index].MapMemory(), stagingBuffer.MapMemory(), stagingBuffer.GetSize());
+
+    return false;
+}
+
+vg::Buffer &RenderBuffer::GetBuffer(int index) { return renderingBuffer[index]; }
+const vg::Buffer &RenderBuffer::GetBuffer(int index) const { return renderingBuffer[index]; }
 
 uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment) {
     bufferChangeFlag.Set(BufferChange::Contents);
@@ -41,7 +37,7 @@ uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment) {
     int padding = (alignment - currentSize % alignment) % alignment;
 
     size += padding + byteSize;
-    if (size >= backBuffer.GetSize()) Reserve(size);
+    if (size >= stagingBuffer.GetSize()) Reserve(size);
 
     sizes.push_back(byteSize);
     alignments.push_back(alignment);
@@ -70,9 +66,9 @@ uint32_t RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
         copyStartOffset += sizes[i];
     }
     size = copyStartOffset;
-    if (size > backBuffer.GetSize()) Reserve(size);
+    if (size > stagingBuffer.GetSize()) Reserve(size);
 
-    char *mem = backBuffer.MapMemory();
+    char *mem = stagingBuffer.MapMemory();
     if (delta > 0) { // expanding
         for (int i = 0; i < newOffsets.size(); i++) {
             uint32_t regID = offsets.size() - i - 1;
@@ -102,7 +98,7 @@ void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
         uint32_t padding = GetPadding(i, writeOffset);
         writeOffset += padding;
 
-        memcpy(backBuffer.MapMemory() + writeOffset, backBuffer.MapMemory() + offsets[i], sizes[i]);
+        memcpy(stagingBuffer.MapMemory() + writeOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
 
         offsets[i] = writeOffset;
         writeOffset += sizes[i];
@@ -119,14 +115,14 @@ void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
 }
 
 void RenderBuffer::Reserve(uint32_t capacity) {
-    if (capacity <= backBuffer.GetSize()) return;
+    if (capacity <= stagingBuffer.GetSize()) return;
     bufferChangeFlag.Set(BufferChange::Size);
 
     vg::Buffer newBuffer(capacity, bufferUsage);
     vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
-    memcpy(newBuffer.MapMemory(), backBuffer.MapMemory(), backBuffer.GetSize());
+    memcpy(newBuffer.MapMemory(), stagingBuffer.MapMemory(), stagingBuffer.GetSize());
 
-    std::swap(backBuffer, newBuffer);
+    std::swap(stagingBuffer, newBuffer);
 }
 
 void RenderBuffer::Erase(
@@ -150,7 +146,7 @@ void RenderBuffer::Erase(
         uint32_t destOffset = regionOffset + eraseOffset;
         uint32_t moveSize = regionSize - (eraseOffset + eraseSize);
 
-        memmove(backBuffer.MapMemory() + destOffset, backBuffer.MapMemory() + sourceOffset, moveSize);
+        memmove(stagingBuffer.MapMemory() + destOffset, stagingBuffer.MapMemory() + sourceOffset, moveSize);
     }
 
     sizes[regionID] -= eraseSize;
@@ -160,7 +156,7 @@ void RenderBuffer::Erase(
         uint32_t padding = GetPadding(i, currentOffset);
         currentOffset += padding;
 
-        memmove(backBuffer.MapMemory() + currentOffset, backBuffer.MapMemory() + offsets[i], sizes[i]);
+        memmove(stagingBuffer.MapMemory() + currentOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
 
         // Aktualizuj offset regionu
         offsets[i] = currentOffset;
@@ -176,7 +172,7 @@ void RenderBuffer::Write(uint32_t regionID, const void *data, uint32_t dataSize,
         "dataSize + writeOffset larger than region size in RenderBuffer::Write()"
     );
     bufferChangeFlag.Set(BufferChange::Contents);
-    memcpy(backBuffer.MapMemory() + offsets[regionID] + writeOffset, data, dataSize);
+    memcpy(stagingBuffer.MapMemory() + offsets[regionID] + writeOffset, data, dataSize);
 }
 
 void RenderBuffer::Write(uint32_t regionID, const void *data) { Write(regionID, data, sizes[regionID]); }
@@ -187,12 +183,12 @@ uint32_t RenderBuffer::Read(uint32_t regionID, void *data, uint32_t maximumReadS
 
     maximumReadSize = std::min(maximumReadSize, sizes[regionID] - readOffset);
 
-    if (data) memcpy(data, backBuffer.MapMemory() + offsets[regionID] + readOffset, maximumReadSize);
+    if (data) memcpy(data, stagingBuffer.MapMemory() + offsets[regionID] + readOffset, maximumReadSize);
 
     return maximumReadSize;
 }
 
-int RenderBuffer::GetCapacity() const { return backBuffer.GetSize(); }
+int RenderBuffer::GetCapacity() const { return stagingBuffer.GetSize(); }
 
 int RenderBuffer::GetSize() const { return size; }
 

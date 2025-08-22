@@ -24,13 +24,11 @@ void Renderer::RecreateRenderpass() {
     );
     descriptorSets = descriptorPool.Allocate(layouts);
 
-    Material::materialBuffer.Swap();
-    Material::materialBuffer.Swap();
     for (size_t i = 0; i < descriptorSets.size(); i++) {
         descriptorSets[i].AttachBuffer(DescriptorType::UniformBuffer, passBuffer, 0, -1, 0, 0);
-        descriptorSets[i].AttachBuffer(DescriptorType::StorageBuffer, Material::materialBuffer, 0, -1, 1, 0);
-        vg::BufferHandle h = (vg::Buffer &)Material::materialBuffer;
-        Material::materialBuffer.Swap();
+        descriptorSets[i].AttachBuffer(
+            DescriptorType::StorageBuffer, Material::materialBuffer.GetBuffer(i), 0, -1, 1, 0
+        );
     }
 
     framebuffers.resize(swapchain.GetImageCount());
@@ -71,7 +69,6 @@ void Renderer::SetPassData(const PassData &data) {
 }
 
 void Renderer::StartFrame() {
-    Material::materialBuffer.Swap();
     renderMeshes.clear();
     renderMeshes.resize(Material::subpasses.size());
     instanceBuffers.clear();
@@ -90,6 +87,10 @@ void Renderer::StartFrame() {
     inFlightFence[frameIndex].Await(true);
 
     auto [imageIndex, result] = swapchain.GetNextImageIndex(imageAvailableSemaphore[frameIndex]);
+    if (Material::materialBuffer.FlushBuffer(imageIndex))
+        descriptorSets[imageIndex].AttachBuffer(
+            DescriptorType::StorageBuffer, Material::materialBuffer.GetBuffer(imageIndex), 0, -1, 1, 0
+        );
 
     commandBuffer[frameIndex].Clear().Begin().Append(
         cmd::BeginRenderpass(

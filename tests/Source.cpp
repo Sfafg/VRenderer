@@ -140,6 +140,7 @@ int main() {
         );
     }
 
+    float t = 0;
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
@@ -175,6 +176,8 @@ int main() {
         glm::mat4 view = glm::lookAt(
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
         );
+        t += 0.01;
+        Material::materialBuffer.Write(mat3.index, (float)sin(t), Material::materialBuffer.Size(mat3.index) * 0);
         Renderer::SetPassData({.viewProjection = proj * view});
         Renderer::StartFrame();
         Renderer::Draw(testMesh, mat1, instanceBuffer, 1000);

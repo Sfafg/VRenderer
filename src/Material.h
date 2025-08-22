@@ -7,6 +7,7 @@
  * @brief Class used to represent a material used for rendering.
  */
 class Material {
+  public:
     friend class Renderer;
 
     // TODO: W destruktorze zmienić aby usuwała się tylko porcja danych wariantu, chyba że jest to ostatni wariant
@@ -53,7 +54,8 @@ class Material {
         float blendConsts[4] = {0, 0, 0, 0};
         std::vector<vg::DynamicState> dynamicState = {vg::DynamicState::Viewport, vg::DynamicState::Scissor};
         std::vector<vg::AttachmentReference> colorAttachments = {
-            vg::AttachmentReference(0, vg::ImageLayout::ColorAttachmentOptimal)};
+            vg::AttachmentReference(0, vg::ImageLayout::ColorAttachmentOptimal)
+        };
     };
 
   public:

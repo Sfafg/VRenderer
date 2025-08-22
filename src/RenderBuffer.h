@@ -19,6 +19,8 @@ class RenderBuffer {
     // (prawie?)
     // TODO: Automatyczne updatowanie descriptorów.
     // TODO: Reallocate nie zmienia indeksu regionu więc powinien zwracać void.
+    // TODO: Zrobić bufferChangeFlag na każdy rendering buffer, i zrobić copy range czyli zakres który musi zostać
+    // skopiowany.
 
   private:
     std::vector<uint32_t> sizes;
@@ -27,11 +29,13 @@ class RenderBuffer {
 
     uint32_t size;
     vg::Flags<vg::BufferUsage> bufferUsage;
-    vg::Buffer frontBuffer; // Rendered to.
-    vg::Buffer backBuffer;  // Written to.
+    vg::Buffer renderingBuffer[2];
+    vg::Buffer stagingBuffer;
     vg::Flags<BufferChange> bufferChangeFlag;
 
-    bool Swap();
+    bool FlushBuffer(int index);
+    vg::Buffer &GetBuffer(int index);
+    const vg::Buffer &GetBuffer(int index) const;
 
   public:
     RenderBuffer();
@@ -41,9 +45,6 @@ class RenderBuffer {
     RenderBuffer(const RenderBuffer &) = delete;
     RenderBuffer &operator=(const RenderBuffer &) = delete;
     ~RenderBuffer();
-
-    operator vg::Buffer &();
-    operator const vg::Buffer &() const;
 
     uint32_t Allocate(uint32_t byteSize, uint32_t alignment);
     uint32_t Reallocate(uint32_t regionID, uint32_t newByteSize);
