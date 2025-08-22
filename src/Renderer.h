@@ -39,7 +39,6 @@ class Renderer {
     };
 
   public:
-    static constexpr int maxFramesInFlight = 2;
     static void Init(void *window, const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height);
 
     static void SetPassData(const PassData &data);

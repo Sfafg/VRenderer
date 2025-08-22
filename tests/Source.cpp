@@ -128,7 +128,6 @@ int main() {
     glm::vec3 cameraPos(0, 0, 0.1f);
     glm::quat cameraRotation(1, 0, 0, 0);
     glm::mat4 proj = glm::perspective(glm::radians(45.0f), w / (float)h, 0.01f, 100.0f);
-    // proj[1][1] *= -1;
 
     vg::Buffer instanceBuffer(sizeof(glm::mat4) * 1000, vg::BufferUsage::VertexBuffer);
     vg::Allocate(instanceBuffer, vg::MemoryProperty::HostVisible);
