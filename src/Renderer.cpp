@@ -92,13 +92,16 @@ void Renderer::StartFrame() {
             DescriptorType::StorageBuffer, Material::materialBuffer.GetBuffer(imageIndex), 0, -1, 1, 0
         );
 
+    Mesh::vertexBuffer.FlushBuffer(imageIndex);
+    Mesh::indexBuffer.FlushBuffer(imageIndex);
+    Mesh::meshDataBuffer.FlushBuffer(imageIndex);
     commandBuffer[frameIndex].Clear().Begin().Append(
         cmd::BeginRenderpass(
             renderPass, framebuffers[imageIndex], {0, 0}, {swapchain.GetWidth(), swapchain.GetHeight()},
             {ClearColor{0, 0, 0, 255}, ClearDepthStencil{1.0f, 0U}}, SubpassContents::Inline
         ),
-        cmd::BindVertexBuffers(Mesh::combinedBuffer, 0),
-        cmd::BindIndexBuffer(Mesh::combinedBuffer, Mesh::vertexBufferSize, IndexType::Uint32),
+        cmd::BindVertexBuffers(Mesh::vertexBuffer.GetBuffer(imageIndex), 0),
+        cmd::BindIndexBuffer(Mesh::indexBuffer.GetBuffer(imageIndex), 0, IndexType::Uint32),
         cmd::SetViewport(Viewport(swapchain.GetWidth(), swapchain.GetHeight())),
         cmd::SetScissor(Scissor(swapchain.GetWidth(), swapchain.GetHeight())),
         cmd::BindDescriptorSets(

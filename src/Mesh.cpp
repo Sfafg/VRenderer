@@ -1,108 +1,115 @@
 #include "Mesh.h"
 
-Mesh::Mesh(int vertexCount, int vertexByteSize, void *vertexData, int indexCount, int indexByteSize, void *indexData)
-    : index(meshDataBuffer.GetSize() / sizeof(MeshMetaData)) {
-
-    // MeshDataBuffer growth.
-    {
-        vg::Buffer staging(sizeof(MeshMetaData), vg::BufferUsage::TransferSrc);
-        vg::Allocate(staging, vg::MemoryProperty::HostVisible);
-
-        MeshMetaData &meshData = *(MeshMetaData *)staging.MapMemory();
-        meshData.firstIndex = (combinedBuffer.GetSize() - vertexBufferSize) / indexByteSize;
-        meshData.indexCount = indexCount;
-        meshData.vertexOffset = std::ceil(vertexBufferSize / (float)vertexByteSize);
-
-        vg::Buffer newBuffer(
-            meshDataBuffer.GetSize() + staging.GetSize(),
-            {vg::BufferUsage::TransferDst, vg::BufferUsage::TransferSrc, vg::BufferUsage::StorageBuffer}
-        );
-        vg::Allocate(newBuffer, vg::MemoryProperty::DeviceLocal);
-
-        vg::CmdBuffer cmd(vg::currentDevice->GetQueue(0));
-        cmd.Begin();
-        if (meshDataBuffer.GetSize() != 0)
-            cmd.Append(vg::cmd::CopyBuffer(meshDataBuffer, newBuffer, {{meshDataBuffer.GetSize()}}));
-
-        cmd.Append(vg::cmd::CopyBuffer(staging, newBuffer, {{staging.GetSize(), 0, meshDataBuffer.GetSize()}}))
-            .End()
-            .Submit()
-            .Await();
-
-        std::swap(meshDataBuffer, newBuffer);
+Mesh::Mesh(int vertexCount, int vertexByteSize, void *vertexData, int indexCount, int indexByteSize, void *indexData) {
+    if ((vg::Buffer &)meshDataBuffer == vg::BufferHandle()) {
+        meshDataBuffer = RenderBuffer(sizeof(MeshMetaData), vg::BufferUsage::StorageBuffer);
+        vertexBuffer = RenderBuffer(vertexCount * vertexByteSize, vg::BufferUsage::VertexBuffer);
+        indexBuffer = RenderBuffer(indexCount * indexByteSize, vg::BufferUsage::IndexBuffer);
     }
-    // CombinedBuffer growth.
-    {
-        vg::Buffer staging(vertexByteSize * vertexCount + indexByteSize * indexCount, vg::BufferUsage::TransferSrc);
 
-        vg::Allocate(staging, vg::MemoryProperty::HostVisible);
-        memcpy(staging.MapMemory(), vertexData, vertexByteSize * vertexCount);
-        memcpy(staging.MapMemory() + vertexByteSize * vertexCount, indexData, indexByteSize * indexCount);
+    MeshMetaData meshData(
+        indexCount, indexBuffer.GetSize() / indexByteSize, std::ceil(vertexBuffer.GetSize() / (float)vertexByteSize)
+    );
+    index = meshDataBuffer.Allocate(sizeof(meshData), sizeof(meshData));
+    meshDataBuffer.Write(index, meshData);
 
-        int vertexPadding = std::ceil(vertexBufferSize / (float)vertexByteSize) * vertexByteSize - vertexBufferSize;
-
-        vg::Buffer newBuffer(
-            combinedBuffer.GetSize() + staging.GetSize() + vertexPadding,
-            {vg::BufferUsage::TransferDst, vg::BufferUsage::TransferSrc, vg::BufferUsage::VertexBuffer,
-             vg::BufferUsage::IndexBuffer}
-        );
-        vg::Allocate(newBuffer, vg::MemoryProperty::DeviceLocal);
-
-        uint64_t newVertexBufferSize = vertexBufferSize + vertexByteSize * vertexCount + vertexPadding;
-
-        vg::CmdBuffer cmd(vg::currentDevice->GetQueue(0));
-        cmd.Begin();
-        if (combinedBuffer.GetSize() != 0)
-            cmd.Append(vg::cmd::CopyBuffer(
-                combinedBuffer, newBuffer,
-                {{vertexBufferSize},
-                 {combinedBuffer.GetSize() - vertexBufferSize, vertexBufferSize, newVertexBufferSize}}
-            ));
-
-        cmd
-            .Append(vg::cmd::CopyBuffer(
-                staging, newBuffer,
-                {{(uint64_t)(vertexByteSize * vertexCount), 0, newVertexBufferSize - (vertexByteSize * vertexCount)},
-                 {(uint64_t)(indexByteSize * indexCount), (uint64_t)(vertexByteSize * vertexCount),
-                  newBuffer.GetSize() - (indexByteSize * indexCount)}}
-            ))
-            .End()
-            .Submit()
-            .Await();
-
-        std::swap(combinedBuffer, newBuffer);
-        vertexBufferSize = newVertexBufferSize;
-    }
+    vertexBuffer.Allocate(vertexCount * vertexByteSize, vertexByteSize);
+    vertexBuffer.Write(index, vertexData, vertexCount * vertexByteSize);
+    indexBuffer.Allocate(indexCount * indexByteSize, indexByteSize);
+    indexBuffer.Write(index, indexData, indexCount * indexByteSize);
+    meshes.push_back(this);
 }
 
-Mesh::Mesh() : index(-1) {}
+Mesh::Mesh() : index(-1U) {}
+
+Mesh::Mesh(Mesh &&o) {
+    std::swap(index, o.index);
+    if (index != -1U) meshes[index] = this;
+}
+
+Mesh &Mesh::operator=(Mesh &&o) {
+    if (this == &o) return *this;
+
+    if (index != -1U && o.index != -1U) std::swap(meshes[index], meshes[o.index]);
+    else if (o.index != -1U) meshes[o.index] = this;
+
+    std::swap(index, o.index);
+
+    return *this;
+}
 
 Mesh::~Mesh() {
-    if (index >= meshDataBuffer.GetSize() / sizeof(MeshMetaData)) return;
+    if (index == -1U) return;
 
-    if (index == 0) {
-        combinedBuffer.~Buffer();
-        meshDataBuffer.~Buffer();
+    meshDataBuffer.Deallocate(index);
+    vertexBuffer.Deallocate(index);
+    indexBuffer.Deallocate(index);
+    meshes.erase(meshes.begin() + index);
+    for (int i = index; i < meshes.size(); i++) meshes[i]->index--;
+    index = -1U;
+}
+
+Mesh::MeshMetaData Mesh::GetMeshMetaData() const { return meshDataBuffer.Read<MeshMetaData>(index); }
+
+uint32_t Mesh::GetVertexCount() const { return vertexBuffer.Size(index) / vertexBuffer.Alignment(index); }
+
+uint32_t Mesh::GetIndexCount() const { return GetMeshMetaData().indexCount; }
+
+void Mesh::AppendVertices(const void *vertexData, uint32_t byteSize) {
+    vertexBuffer.Reallocate(index, vertexBuffer.Size(index) + byteSize);
+    vertexBuffer.Write(index, vertexData, byteSize, vertexBuffer.Size(index) - byteSize);
+    for (int i = index + 1; i < meshes.size(); i++) {
+        meshDataBuffer.Write<uint32_t>(
+            i, vertexBuffer.Offset(i) / vertexBuffer.Alignment(i), offsetof(MeshMetaData, vertexOffset)
+        );
     }
 }
 
-Mesh::MeshMetaData Mesh::GetMeshMetaData() const {
-    if (index >= meshDataBuffer.GetSize() / sizeof(MeshMetaData)) return MeshMetaData();
-
-    vg::Buffer read(sizeof(MeshMetaData), vg::BufferUsage::TransferDst);
-    vg::Allocate(read, vg::MemoryProperty::HostVisible);
-
-    vg::CmdBuffer(vg::currentDevice->GetQueue(0))
-        .Begin()
-        .Append(vg::cmd::CopyBuffer(meshDataBuffer, read, {{read.GetSize(), index * sizeof(MeshMetaData), 0}}))
-        .End()
-        .Submit()
-        .Await();
-
-    MeshMetaData meshData = *(MeshMetaData *)read.MapMemory();
-    return meshData;
+void Mesh::AppendIndices(const void *indexData, uint32_t byteSize) {
+    indexBuffer.Reallocate(index, indexBuffer.Size(index) + byteSize);
+    indexBuffer.Write(index, indexData, byteSize, indexBuffer.Size(index) - byteSize);
+    meshDataBuffer.Write<uint32_t>(
+        index, indexBuffer.Size(index) / indexBuffer.Alignment(index), offsetof(MeshMetaData, indexCount)
+    );
+    for (int i = index + 1; i < meshes.size(); i++) {
+        meshDataBuffer.Write<uint32_t>(
+            i, indexBuffer.Offset(i) / indexBuffer.Alignment(i), offsetof(MeshMetaData, firstIndex)
+        );
+    }
+}
+void Mesh::EraseVertices(uint32_t count) {
+    vertexBuffer.Erase(
+        index, vertexBuffer.Alignment(index) * count, vertexBuffer.Size(index) - vertexBuffer.Alignment(index) * count
+    );
+    for (int i = index + 1; i < meshes.size(); i++) {
+        meshDataBuffer.Write<uint32_t>(
+            i, vertexBuffer.Offset(i) / vertexBuffer.Alignment(i), offsetof(MeshMetaData, vertexOffset)
+        );
+    }
 }
 
-vg::Buffer Mesh::combinedBuffer;
-vg::Buffer Mesh::meshDataBuffer;
-uint64_t Mesh::vertexBufferSize = 0;
+void Mesh::EraseIndices(uint32_t count) {
+    indexBuffer.Erase(
+        index, indexBuffer.Alignment(index) * count, indexBuffer.Size(index) - indexBuffer.Alignment(index) * count
+    );
+    meshDataBuffer.Write<uint32_t>(
+        index, indexBuffer.Size(index) / indexBuffer.Alignment(index), offsetof(MeshMetaData, indexCount)
+    );
+    for (int i = index + 1; i < meshes.size(); i++) {
+        meshDataBuffer.Write<uint32_t>(
+            i, indexBuffer.Offset(i) / indexBuffer.Alignment(i), offsetof(MeshMetaData, firstIndex)
+        );
+    }
+}
+
+void Mesh::WriteVertexData(const void *vertexData, uint32_t byteSize, uint32_t byteOffset) {
+    vertexBuffer.Write(index, vertexData, byteSize, byteOffset);
+}
+void Mesh::WriteIndexData(const void *indexData, uint32_t byteSize, uint32_t byteOffset) {
+    indexBuffer.Write(index, indexData, byteSize, byteOffset);
+}
+
+RenderBuffer Mesh::meshDataBuffer;
+RenderBuffer Mesh::vertexBuffer;
+RenderBuffer Mesh::indexBuffer;
+std::vector<Mesh *> Mesh::meshes;

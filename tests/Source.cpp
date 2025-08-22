@@ -66,7 +66,7 @@ vg::SurfaceHandle InitVulkan(GLFWwindow *window) {
     );
     generalQueue = vg::Queue({vg::QueueType::General}, 1.0f);
     renderDevice = vg::Device(
-        {&generalQueue}, {"VK_KHR_swapchain", "VK_EXT_sampler_filter_minmax"}, deviceFeatures, windowSurface,
+        {&generalQueue}, {"VK_KHR_swapchain"}, deviceFeatures, windowSurface,
         [](auto id, auto supportedQueues, auto supportedExtensions, auto type, vg::DeviceLimits limits,
            vg::DeviceFeatures features) { return (type == vg::DeviceType::Dedicated); }
     );
@@ -175,13 +175,28 @@ int main() {
         glm::mat4 view = glm::lookAt(
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
         );
+        testMesh1.WriteVertexData(
+            new float[]{float(cos(t * 1.8) * 0.8 - 1), float(sin(t * 1.8) * 0.8 - 1), float(sin(t * 1.8) * 0.5 + 0.5)},
+            sizeof(float) * 3, 0
+        );
+        if (t == 0) {
+            testMesh.AppendVertices(new float[]{1.2, 1.2}, sizeof(float) * 2);
+            testMesh.AppendIndices(new int[]{2, 3, 4}, sizeof(int) * 3);
+
+            testMesh1.AppendVertices(new float[]{-1.2, 0.5, 0, 0, 0}, sizeof(float) * 5);
+            testMesh1.AppendIndices(new int[]{2, 3, 4}, sizeof(int) * 3);
+        }
+        if (t == 0.01f) {
+            testMesh.EraseIndices(3);
+            testMesh.EraseVertices(2);
+        }
         t += 0.01;
         mat3.Write((float)abs(sin(t)));
         Renderer::SetPassData({.viewProjection = proj * view});
         Renderer::StartFrame();
         Renderer::Draw(testMesh, mat1, instanceBuffer, 1000);
         Renderer::Draw(testMesh2, mat3, instanceBuffer, 1000);
-        Renderer::Draw(testMesh2, mat4);
+        Renderer::Draw(testMesh1, mat4);
         Renderer::Draw(testMesh1, mat2);
         Renderer::EndFrame();
         Renderer::Present(generalQueue);
