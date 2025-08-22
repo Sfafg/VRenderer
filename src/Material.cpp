@@ -68,7 +68,8 @@ Material::Material(
                   0,
                   Vector{
                       vg::Shader(vg::ShaderStage::Vertex, vertexShaderPath),
-                      vg::Shader(vg::ShaderStage::Fragment, fragmentShaderPath)},
+                      vg::Shader(vg::ShaderStage::Fragment, fragmentShaderPath)
+                  },
                   vertexInput, inputAssembly, vg::Tesselation(), viewportState, rasterizer, vg::Multisampling(),
                   depthStencil, colorBlending, dynamicState, childrenCount
               ),
@@ -103,6 +104,15 @@ Material::~Material() {
     for (int i = index; i < materials.size(); i++) materials[i]->index--;
     index = -1;
 }
+
+void Material::Write(const void *data, uint32_t dataSize, uint32_t offset) {
+    materialBuffer.Write(index, data, dataSize, offset + materialBuffer.Alignment(index) * variant);
+}
+
+void Material::Read(void *data, uint32_t readSize, uint32_t offset) {
+    materialBuffer.Read(index, data, readSize, offset + materialBuffer.Alignment(index) * variant);
+}
+
 std::vector<vg::Subpass> Material::subpasses;
 std::vector<vg::SubpassDependency> Material::dependecies;
 std::vector<Material *> Material::materials;

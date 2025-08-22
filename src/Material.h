@@ -7,7 +7,6 @@
  * @brief Class used to represent a material used for rendering.
  */
 class Material {
-  public:
     friend class Renderer;
 
     // TODO: W destruktorze zmienić aby usuwała się tylko porcja danych wariantu, chyba że jest to ostatni wariant
@@ -98,6 +97,12 @@ class Material {
     Material(const Material &) = delete;
     Material &operator=(const Material &) = delete;
     ~Material();
+
+    void Write(const void *data, uint32_t dataSize, uint32_t offset = 0);
+    template <typename T> void Write(const T &data, uint32_t offset = 0);
+
+    void Read(void *data, uint32_t readSize, uint32_t offset = 0);
+    template <typename T> T Write(uint32_t offset = 0);
 };
 template <typename T>
 Material::Material(
@@ -126,3 +131,11 @@ Material::Material(
 
 template <typename T>
 Material::Material(Material *material, const T &materialData) : Material(material, &materialData, sizeof(T)) {}
+
+template <typename T> void Material::Write(const T &data, uint32_t offset) { Write(&data, sizeof(data), offset); }
+
+template <typename T> T Material::Write(uint32_t offset) {
+    T t;
+    Write(&t, sizeof(t), offset);
+    return t;
+}

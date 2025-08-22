@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.30.1)
 project(VRenderer)
 set(CMAKE_CXX_STANDARD 23)
 
-option(BUILD_TESTS1 "Build tests" TRUE)
+option(VRENDERER_BUILD_TESTS "Build tests" TRUE)
 
 set(TESTS_ROOT "${PROJECT_SOURCE_DIR}/tests")
 set(SRC_ROOT "${PROJECT_SOURCE_DIR}/src")
@@ -51,7 +51,7 @@ target_include_directories(VRenderer PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-if(BUILD_TESTS1)
+if(VRENDERER_BUILD_TESTS)
 # SHADERS
     find_program(GLSLC_EXECUTABLE glslc)
     if(NOT GLSLC_EXECUTABLE)
