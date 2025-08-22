@@ -122,53 +122,90 @@ void TestRenderBuffer() {
         std::memcmp(partialReadData.data(), partialData.data(), partialSize) == 0,
         "Wpisywanie częściowych danych nie działa"
     );
-    ////////////////////////////////////////////////////
+    
+    // Test 6: Realokacja z zachowaniem danych
     std::cout << "[TEST] Data BEFORE realloc:  ";
-    for (auto b : data) std::cout << (int)b << " ";
+    for (int i = 0; i < random_size; i++) std::cout << (int)data[i] << " ";
     std::cout << std::endl;
 
-    uint32_t newSize = allocSize * 1.1;
-    uint32_t newRegion = rb.Reallocate(region, newSize);
+    uint32_t newSize = static_cast<uint32_t>(allocSize * 1.2);  // zwiększ rozmiar
+    rb.Reallocate(region, newSize);
 
-    std::vector<uint8_t> reallocReadData(allocSize);
-    rb.Read(newRegion, reallocReadData.data(), allocSize);
-
+    // Sprawdź czy dane zostały zachowane
+    std::vector<uint8_t> reallocReadData(random_size);
+    uint32_t readSizeAfterRealloc = rb.Read(region, reallocReadData.data(), random_size);
+    printf("Read size after realloc: %u\n", readSizeAfterRealloc);
+    
     std::cout << "[TEST] Data after realloc:  ";
-    for (auto b : reallocReadData) std::cout << (int)b << " ";
+    for (int i = 0; i < random_size; i++) std::cout << (int)reallocReadData[i] << " ";
     std::cout << std::endl;
 
-    Check(std::memcmp(reallocReadData.data(), data.data(), allocSize) == 0, "Realokacja nie zachowala danych");
-    ////////////////////////////////////////////////////
+    Check(std::memcmp(reallocReadData.data(), data.data(), random_size) == 0, "Realokacja nie zachowala danych");
+    Check(rb.Size(region) == newSize, "Realokacja nie zmieniła rozmiaru regionu");
+    Check(rb.Offset(region) % alignment == 0, "Offset po realokacji nie jest aligned");
 
-    /*
-    // Test 6: Realokacja
-    uint32_t newSize = allocSize * 2;
-    uint32_t newRegion = rb.Reallocate(region, newSize);
+    // Test 7: Alokacja kolejnego regionu po realokacji (sprawdzenie paddingu)
+    uint32_t region2 = rb.Allocate(100, 32);
+    Check(rb.Offset(region2) % 32 == 0, "Drugi region nie jest poprawnie aligned");
+    Check(rb.Offset(region2) >= rb.Offset(region) + rb.Size(region), "Drugi region nakłada się na pierwszy");
+    
+    // Sprawdź padding między regionami
+    uint32_t expectedPadding = rb.GetPadding(region2, rb.Offset(region) + rb.Size(region));
+    uint32_t actualGap = rb.Offset(region2) - (rb.Offset(region) + rb.Size(region));
+    Check(actualGap == expectedPadding, "Niepoprawny padding między regionami");
 
-    std::vector<uint8_t> reallocReadData(allocSize);
-    rb.Read(newRegion, reallocReadData.data(), allocSize);
-    Check(std::memcmp(reallocReadData.data(), data.data(), allocSize) == 0, "Realokacja nie zachowala danych");
+    printf("Region 1: offset=%u, size=%u, alignment= %u\n", rb.Offset(region), rb.Size(region), rb.Alignment(region));
+    printf("Region 2: offset=%u, size=%u, alignment= %u\n", rb.Offset(region2), rb.Size(region2), rb.Alignment(region2));
+    printf("Gap between regions: %u (expected padding: %u)\n", actualGap, expectedPadding);
 
-    // Sprawdzenie, czy nowy region ma poprawny rozmiar i offset
-    int sizeBeforeDealloc = rb.GetSize();
-    rb.Deallocate(std::move(region));
-    Check(rb.GetSize() <= sizeBeforeDealloc, "Rozmiar render bufora po dealokacji nie zmniejszyl sie"); */
+    // Test 8: Erase z zachowaniem alignmentów
+    std::vector<uint8_t> testData(50);
+    for (int i = 0; i < 50; i++) {
+        testData[i] = static_cast<uint8_t>(200 + i);
+    }
+    rb.Write(region2, testData.data(), 50);
+    
+    // Sprawdź dane przed Erase
+    std::vector<uint8_t> beforeErase(50);
+    rb.Read(region2, beforeErase.data(), 50);
+    Check(std::memcmp(beforeErase.data(), testData.data(), 50) == 0, "Dane nie zostały zapisane przed Erase");
 
-    /*
-    // Test 7: Rezerwacja większej pojemności
+    // Usuń część danych z pierwszego regionu
+    rb.Erase(region, 100, 200);  // usuń 100 bajtów od pozycji 200
+    
+    // Sprawdź czy drugi region wciąż ma poprawne dane i alignment
+    std::vector<uint8_t> afterErase(50);
+    rb.Read(region2, afterErase.data(), 50);
+    Check(std::memcmp(afterErase.data(), testData.data(), 50) == 0, "Erase zniszczył dane w innych regionach");
+    Check(rb.Offset(region2) % rb.Alignment(region2) == 0, "Erase naruszył alignment drugiego regionu");
+    Check(rb.Size(region) == newSize - 100, "Erase nie zmniejszył rozmiaru regionu");
+
+    printf("After Erase - Region 1: offset=%u, size=%u, alignment= %u\n", rb.Offset(region), rb.Size(region), rb.Alignment(region));
+    printf("After Erase - Region 2: offset=%u, size=%u, alignment= %u\n", rb.Offset(region2), rb.Size(region2), rb.Alignment(region2));
+
+    // Test 9: Dealokacja ze sprawdzeniem paddingu
+    
+    uint32_t region3 = rb.Allocate(64, 64);
+    uint32_t oldOffset2 = rb.Offset(region2);
+    uint32_t oldOffset3 = rb.Offset(region3);
+    
+    printf("Before Deallocate - Region 2: offset=%u, Region 3: offset=%u\n", oldOffset2, oldOffset3);
+    
+    rb.Deallocate(region2);  // usuń środkowy region
+
+    // po usunieciu region2, region3 powinien się przesunąć na miejsce region2, czyli 1
+    Check(rb.Offset(region2) % rb.Alignment(region2) == 0, "Dealokacja naruszyla alignment pozostałego regionu");
+    Check(rb.Offset(region2) < oldOffset3, "Region nie został przesunięty po dealokacji");
+    
+    printf("After Deallocate - Region 3: offset=%u (was %u)\n", rb.Offset(region2), oldOffset3);
+
+    // Test 10: Rezerwacja większej pojemności
     int biggerCapacity = initialCapacity * 4;
+    int oldCapacity = rb.GetCapacity();
     rb.Reserve(biggerCapacity);
-    Check(rb.GetCapacity() >= biggerCapacity, "Rezerwacja wiekszej pojemnosci nie dziala");
-
-    // Test 8: Sprawdzenie poprawności alokacji i zapisu danych do regionu po rezerwacji
-    auto r1 = rb.Allocate(30, 8);
-    auto r2 = rb.Allocate(50, 16);
-    uint32_t paddingR2 = rb.GetPadding(r2, rb.Offset(r1) + rb.Size(r1));
-    Check(
-        paddingR2 == (rb.Alignment(r2) - (rb.Offset(r1) + rb.Size(r1)) % rb.Alignment(r2)) % rb.Alignment(r2),
-        "Padding calculation for second region is incorrect"
-    );
-    */
+    Check(rb.GetCapacity() >= biggerCapacity, "Rezerwacja większej pojemności nie działa");
+    
+    std::cout << "💗💗💗💗💗 All tests passed! 💗💗💗💗💗" << std::endl;
 }
 
 int main() {

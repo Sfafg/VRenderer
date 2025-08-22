@@ -58,14 +58,16 @@ void RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
 
     std::vector<uint32_t> newOffsets;
     newOffsets.reserve(sizes.size() - regionID);
-    uint32_t copyStartOffset = offsets[regionID] + sizes[regionID] + delta;
-
+    uint32_t baseOffset = offsets[regionID] + newByteSize;
+    
     for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
-        copyStartOffset += GetPadding(i, copyStartOffset);
-        newOffsets.push_back(copyStartOffset);
-        copyStartOffset += sizes[i];
+        uint32_t padding = GetPadding(i, baseOffset);
+        baseOffset += padding;
+        newOffsets.push_back(baseOffset);
+        baseOffset += sizes[i];
     }
-    size = copyStartOffset;
+
+    size = baseOffset;
     if (size > stagingBuffer.GetSize()) Reserve(size);
 
     char *mem = stagingBuffer.MapMemory();
@@ -126,8 +128,7 @@ void RenderBuffer::Reserve(uint32_t capacity) {
 
 void RenderBuffer::Erase(
     uint32_t regionID, uint32_t eraseSize, uint32_t eraseOffset
-) // TODO: spytac sie Slawka jak ma sie zachowywac
-// NOTE przy skrajnych nwm czy bedzie sie dobrze zachowywać, czy ma terminować czy co robić idk
+) 
 {
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Erase()");
     assert(
@@ -149,17 +150,18 @@ void RenderBuffer::Erase(
     }
 
     sizes[regionID] -= eraseSize;
-    uint32_t currentOffset = offsets[regionID] + sizes[regionID];
 
+    uint32_t baseOffset = offsets[regionID] + sizes[regionID];
     for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
-        uint32_t padding = GetPadding(i, currentOffset);
-        currentOffset += padding;
-
-        memmove(stagingBuffer.MapMemory() + currentOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
-
+        uint32_t padding = GetPadding(i, baseOffset);
+        baseOffset += padding;
+        
+        // Przenieś dane regionu na nową pozycję
+        memmove(stagingBuffer.MapMemory() + baseOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
+        
         // Aktualizuj offset regionu
-        offsets[i] = currentOffset;
-        currentOffset += sizes[i];
+        offsets[i] = baseOffset;
+        baseOffset += sizes[i];
     }
 }
 
