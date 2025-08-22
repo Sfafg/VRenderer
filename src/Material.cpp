@@ -79,11 +79,13 @@ Material::Material(
       ) {}
 
 Material::Material() : index(-1), variant(0) {}
+
 Material::Material(Material &&o) : Material() {
     std::swap(index, o.index);
     std::swap(variant, o.variant);
     if (index != (uint16_t)-1) materials[index] = this;
 }
+
 Material &Material::operator=(Material &&o) {
     if (this == &o) return *this;
 
@@ -95,6 +97,7 @@ Material &Material::operator=(Material &&o) {
 
     return *this;
 }
+
 Material::~Material() {
     if (index == (uint16_t)-1) return;
 

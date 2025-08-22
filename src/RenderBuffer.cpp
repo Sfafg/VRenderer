@@ -46,7 +46,7 @@ uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment) {
     return sizes.size() - 1;
 }
 
-uint32_t RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
+void RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Reallocate()");
     assert(
         newByteSize > 0 &&
@@ -54,7 +54,7 @@ uint32_t RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
     );
 
     int32_t delta = (int32_t)(newByteSize) - (int32_t)(sizes[regionID]);
-    if (delta == 0) return regionID;
+    if (delta == 0) return;
 
     std::vector<uint32_t> newOffsets;
     newOffsets.reserve(sizes.size() - regionID);
@@ -84,7 +84,6 @@ uint32_t RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
 
     sizes[regionID] = newByteSize;
     bufferChangeFlag.Set(BufferChange::Contents);
-    return regionID;
 }
 
 void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
