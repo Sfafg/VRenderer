@@ -3,12 +3,15 @@
 
 RenderObject::RenderObject(Mesh *mesh, Material *material, uint32_t batchDataByteSize, const void *data) {
     Batch t{material, mesh};
-    auto it = std::lower_bound(batches.begin(), batches.end(), t, [](const auto &a, const auto &b) { return a < b; });
+    auto it = std::lower_bound(batches.begin(), batches.end(), t);
 
     batchIndex = (it - batches.begin());
     if (it == batches.end() || *it != t) {
         t.batchBuffer = RenderBuffer(batchDataByteSize + (batchDataByteSize == 0), vg::BufferUsage::VertexBuffer);
         batches.emplace(it, std::move(t));
+
+        for (int i = batchIndex + 1; i < batches.size(); i++)
+            for (auto &&ro : batches[i].renderObjects) ro->batchIndex--;
     }
     batches[batchIndex].renderObjects.push_back(this);
 

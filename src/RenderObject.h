@@ -16,8 +16,12 @@ struct Batch {
                mesh->index == o.mesh->index;
     }
     bool operator<(const Batch &o) const {
-        return material->index < o.material->index || material->variant < o.material->variant ||
-               mesh->index < o.mesh->index;
+        if (material->index < o.material->index) return true;
+        if (material->index > o.material->index) return false;
+
+        if (material->variant < o.material->variant) return true;
+        if (material->variant > o.material->variant) return false;
+        return mesh->index < o.mesh->index;
     }
 };
 

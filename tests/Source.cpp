@@ -211,8 +211,7 @@ int main() {
         t += 0.01;
         mat3.Write((float)abs(sin(t)));
         Renderer::SetPassData({.viewProjection = proj * view});
-        Renderer::StartFrame();
-        Renderer::EndFrame();
+        Renderer::RenderFrame();
         Renderer::Present(generalQueue);
     }
     Renderer::Destroy();

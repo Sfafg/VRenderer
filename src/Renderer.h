@@ -25,9 +25,6 @@ class Renderer {
     static int presentImageIndex;
 
     static vg::RenderPass renderPass;
-    static std::vector<std::vector<std::vector<const Mesh *>>> renderMeshes;
-    static std::vector<std::vector<std::vector<const vg::Buffer *>>> instanceBuffers;
-    static std::vector<std::vector<std::vector<int>>> instanceCount;
     static vg::Buffer passBuffer;
 
     friend Material;
@@ -43,11 +40,8 @@ class Renderer {
     static void Init(void *window, const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height);
 
     static void SetPassData(const PassData &data);
-    static void StartFrame();
-    static void Draw(const Mesh &mesh, const Material &material, const vg::Buffer &instanceBuffer, int instanceCount);
-    static void Draw(const Mesh &mesh, const Material &material);
-    static void EndFrame();
 
+    static void RenderFrame();
     static void Present(vg::Queue &queue);
 
     static void Destroy();

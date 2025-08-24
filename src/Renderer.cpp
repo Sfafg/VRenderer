@@ -68,25 +68,11 @@ void Renderer::SetPassData(const PassData &data) {
     memcpy(p, &data, sizeof(data));
 }
 
-void Renderer::StartFrame() {
-    renderMeshes.clear();
-    renderMeshes.resize(Material::subpasses.size());
-    instanceBuffers.clear();
-    instanceBuffers.resize(Material::subpasses.size());
-    instanceCount.clear();
-    instanceCount.resize(Material::subpasses.size());
-    for (int i = 0; i < Material::subpasses.size(); i++) {
-        int variantCount = std::max(1U, Material::materialBuffer.sizes[i] / Material::materialBuffer.alignments[i]);
-        renderMeshes[i].clear();
-        renderMeshes[i].resize(variantCount);
-        instanceBuffers[i].clear();
-        instanceBuffers[i].resize(variantCount);
-        instanceCount[i].clear();
-        instanceCount[i].resize(variantCount);
-    }
+void Renderer::RenderFrame() {
     inFlightFence[frameIndex].Await(true);
 
     auto [imageIndex, result] = swapchain.GetNextImageIndex(imageAvailableSemaphore[frameIndex]);
+    presentImageIndex = imageIndex;
     if (Material::materialBuffer.FlushBuffer(imageIndex))
         descriptorSets[imageIndex].AttachBuffer(
             DescriptorType::StorageBuffer, Material::materialBuffer.GetBuffer(imageIndex), 0, -1, 1, 0
@@ -95,6 +81,7 @@ void Renderer::StartFrame() {
     Mesh::vertexBuffer.FlushBuffer(imageIndex);
     Mesh::indexBuffer.FlushBuffer(imageIndex);
     Mesh::meshDataBuffer.FlushBuffer(imageIndex);
+
     commandBuffer[frameIndex].Clear().Begin().Append(
         cmd::BeginRenderpass(
             renderPass, framebuffers[imageIndex], {0, 0}, {swapchain.GetWidth(), swapchain.GetHeight()},
@@ -108,30 +95,11 @@ void Renderer::StartFrame() {
             renderPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[imageIndex]}
         )
     );
-    presentImageIndex = imageIndex;
-}
-
-void Renderer::Draw(const Mesh &mesh, const Material &material, const vg::Buffer &instanceBuffer, int instanceCount) {
-    int s = renderMeshes.size();
-    int s1 = renderMeshes[material.variant].size();
-    renderMeshes[material.index][material.variant].push_back(&mesh);
-    instanceBuffers[material.index][material.variant].push_back(&instanceBuffer);
-    Renderer::instanceCount[material.index][material.variant].push_back(instanceCount);
-}
-
-void Renderer::Draw(const Mesh &mesh, const Material &material) {
-    renderMeshes[material.index][material.variant].push_back(&mesh);
-    instanceBuffers[material.index][material.variant].push_back(nullptr);
-    instanceCount[material.index][material.variant].push_back(1);
-}
-
-void Renderer::EndFrame() {
-
     for (int i = 0; i < RenderObject::batches.size(); i++) {
         auto &batch = RenderObject::batches[i];
         const auto &lastBatch = RenderObject::batches[i - (i > 0)];
         if (i == 0 || batch.material->index != lastBatch.material->index) {
-            if (i != 0 && batch.material->index < Material::subpasses.size() - 1)
+            if (i != 0 && batch.material->index < Material::subpasses.size())
                 commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
 
             commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[batch.material->index]));
@@ -157,40 +125,14 @@ void Renderer::EndFrame() {
                 );
         }
 
-        batch.batchBuffer.FlushBuffer(presentImageIndex);
+        batch.batchBuffer.FlushBuffer(imageIndex);
 
         auto d = batch.mesh->GetMeshMetaData();
         commandBuffer[frameIndex].Append(
-            cmd::BindVertexBuffers(batch.batchBuffer.GetBuffer(presentImageIndex), 0, 1),
+            cmd::BindVertexBuffers(batch.batchBuffer.GetBuffer(imageIndex), 0, 1),
             cmd::DrawIndexed(d.indexCount, batch.renderObjects.size(), d.firstIndex, d.vertexOffset)
         );
     }
-    // for (int i = 0; i < Material::subpasses.size(); i++) {
-    //     commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[i]));
-    //     int variantCount = std::max(1U, Material::materialBuffer.sizes[i] / Material::materialBuffer.alignments[i]);
-    //     for (int j = 0; j < variantCount; j++) {
-    //         if (renderMeshes[i][j].size() == 0) continue;
-    //         if (Material::materialBuffer.sizes[i] != 0)
-    //             commandBuffer[frameIndex].Append(
-    //                 cmd::PushConstants(
-    //                     renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
-    //                     Material::materialBuffer.offsets[i] / Material::materialBuffer.alignments[i] + j
-    //                 )
-    //             );
-
-    //         for (auto &&mesh : renderMeshes[i][j]) {
-    //             auto d = mesh->GetMeshMetaData();
-    //             int k = &mesh - &renderMeshes[i][j][0];
-    //             if (instanceBuffers[i][j][k])
-    //                 commandBuffer[frameIndex].Append(cmd::BindVertexBuffers(*instanceBuffers[i][j][k], 0, 1));
-    //             commandBuffer[frameIndex].Append(
-    //                 cmd::DrawIndexed(d.indexCount, instanceCount[i][j][k], d.firstIndex, d.vertexOffset)
-    //             );
-    //         }
-    //     }
-    //     if (i < Material::subpasses.size() - 1)
-    //         commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
-    // }
 
     commandBuffer[frameIndex]
         .Append(cmd::EndRenderpass())
@@ -234,7 +176,4 @@ int Renderer::frameIndex;
 int Renderer::presentImageIndex;
 
 RenderPass Renderer::renderPass;
-std::vector<std::vector<std::vector<const Mesh *>>> Renderer::renderMeshes;
-std::vector<std::vector<std::vector<const vg::Buffer *>>> Renderer::instanceBuffers;
-std::vector<std::vector<std::vector<int>>> Renderer::instanceCount;
 vg::Buffer Renderer::passBuffer;
