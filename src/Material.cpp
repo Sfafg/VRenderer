@@ -98,40 +98,23 @@ Material &Material::operator=(Material &&o) {
 
 Material::~Material() {
     if (index == (uint16_t)-1) return;
+    bool lastVariant = materialBuffer.Size(index) == materialBuffer.Alignment(index);
 
-    // Tutaj powinno usuwać tylko swój wazriant.
-    materialBuffer.Deallocate(index);
-    materials.erase(materials.begin() + index);
-    for (int i = index; i < materials.size(); i++) materials[i]->index--;
-    index = -1;
-}
-
-
-Material::~Material() {
-    if (index == (uint16_t)-1) return;
-    bool lastVariant = true;
-    for (Material* mat : materials) {
-        if (mat != this && mat->index == index) {
-            lastVariant = false;
-            break;
-        }
-    }
     if (lastVariant) {
         materialBuffer.Deallocate(index);
-    }
-    else{
+        for (int i = index; i < materials.size(); i++) materials[i]->index--;
+    } else {
         uint32_t variantSize = materialBuffer.Alignment(index);
         uint32_t variantOffset = variant * variantSize;
         materialBuffer.Erase(index, variantSize, variantOffset);
+
         // Zaktualizuj numery wariantów dla materiałów o wyższych wariantach
-        for (Material* mat : materials) {
-            if (mat && mat->index == index && mat->variant > variant) {
-                mat->variant--;
-            }
+        for (Material *mat : materials) {
+            if (mat->index == index && mat->variant > variant) { mat->variant--; }
         }
     }
-    for (int i = index; i < materials.size(); i++) materials[i]->index--;
     index = -1;
+    Renderer::RecreateRenderpass();
 }
 
 void Material::Write(const void *data, uint32_t dataSize, uint32_t offset) {
