@@ -3,6 +3,10 @@
 #include <vector>
 
 class Mesh {
+    friend class Renderer;
+    friend class RenderObject;
+    friend class Batch;
+
     struct MeshMetaData {
         uint32_t indexCount;
         uint32_t firstIndex;
@@ -15,8 +19,6 @@ class Mesh {
     static std::vector<Mesh *> meshes;
 
     uint32_t index;
-
-    friend class Renderer;
 
   public:
     Mesh(int vertexCount, int vertexByteSize, void *vertexData, int indexCount, int indexByteSize, void *indexData);

@@ -8,6 +8,8 @@
  */
 class Material {
     friend class Renderer;
+    friend class RenderObject;
+    friend class Batch;
 
     // TODO: W destruktorze zmienić aby usuwała się tylko porcja danych wariantu, chyba że jest to ostatni wariant
     // materiału to cały region.

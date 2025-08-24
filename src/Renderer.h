@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "Material.h"
 #include "Mesh.h"
+#include "RenderObject.h"
 #include "VG/VG.h"
 #include <vector>
 

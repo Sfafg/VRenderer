@@ -123,23 +123,29 @@ int main() {
         sizeof(int), new int[]{0, 1, 2, 2, 3, 0}
     );
 
+    RenderObject renderObject1(&testMesh1, &mat2);
+    RenderObject renderObject2(&testMesh1, &mat4);
+    RenderObject renderObjects[1000];
+    RenderObject renderObjects2[1000];
+    for (int i = 0; i < 1000; i++) {
+        glm::mat4 matrix = glm::translate(
+            glm::scale(glm::mat4(1), glm::vec3(0.03)) *
+                glm::rotate(glm::mat4(1), randf(0, 100), glm::vec3(randf(), randf(), randf())),
+            glm::vec3(randf(-30, 30), randf(-30, 30), randf(-30, 30))
+        );
+
+        renderObjects[i] = RenderObject(&testMesh, &mat1, matrix);
+        renderObjects2[i] = RenderObject(&testMesh2, &mat3, matrix);
+    }
+
     glm::dvec2 lastMouseP;
     glfwGetCursorPos(window, &lastMouseP.x, &lastMouseP.y);
     glm::vec3 cameraPos(0, 0, 0.1f);
     glm::quat cameraRotation(1, 0, 0, 0);
     glm::mat4 proj = glm::perspective(glm::radians(45.0f), w / (float)h, 0.01f, 100.0f);
 
-    vg::Buffer instanceBuffer(sizeof(glm::mat4) * 1000, vg::BufferUsage::VertexBuffer);
-    vg::Allocate(instanceBuffer, vg::MemoryProperty::HostVisible);
-    glm::mat4 *instanceData = (glm::mat4 *)instanceBuffer.MapMemory();
-    for (int i = 0; i < 1000; i++) {
-        instanceData[i] = glm::translate(
-            glm::rotate(glm::mat4(1), randf(0, 100), glm::vec3(randf(), randf(), randf())),
-            glm::vec3(randf(-10, 10), randf(-10, 10), randf(-10, 10))
-        );
-    }
-
     float t = 0;
+    int n = 0;
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
@@ -171,6 +177,14 @@ int main() {
 
             cameraPos += cameraRotation * direction * 0.01f;
         }
+        for (int i = 0; i < 100; i++)
+            renderObjects[(n + i) % 1000].SetBatchData(
+                glm::translate(
+                    renderObjects[(n + i) % 1000].ReadBatchData<glm::mat4>(),
+                    glm::vec3(randf(-0.6, 0.6), randf(-0.6, 0.6), randf(-0.6, 0.6))
+                )
+            );
+        n += 10;
 
         glm::mat4 view = glm::lookAt(
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
@@ -194,10 +208,10 @@ int main() {
         mat3.Write((float)abs(sin(t)));
         Renderer::SetPassData({.viewProjection = proj * view});
         Renderer::StartFrame();
-        Renderer::Draw(testMesh, mat1, instanceBuffer, 1000);
-        Renderer::Draw(testMesh2, mat3, instanceBuffer, 1000);
-        Renderer::Draw(testMesh1, mat4);
-        Renderer::Draw(testMesh1, mat2);
+        // // Renderer::Draw(testMesh, mat1, instanceBuffer, 1000);
+        // // Renderer::Draw(testMesh2, mat3, instanceBuffer, 1000);
+        // Renderer::Draw(testMesh1, mat4);
+        // Renderer::Draw(testMesh1, mat2);
         Renderer::EndFrame();
         Renderer::Present(generalQueue);
     }

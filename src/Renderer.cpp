@@ -126,32 +126,71 @@ void Renderer::Draw(const Mesh &mesh, const Material &material) {
 }
 
 void Renderer::EndFrame() {
-    for (int i = 0; i < Material::subpasses.size(); i++) {
-        commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[i]));
-        int variantCount = std::max(1U, Material::materialBuffer.sizes[i] / Material::materialBuffer.alignments[i]);
-        for (int j = 0; j < variantCount; j++) {
-            if (renderMeshes[i][j].size() == 0) continue;
-            if (Material::materialBuffer.sizes[i] != 0)
+
+    for (int i = 0; i < RenderObject::batches.size(); i++) {
+        const auto &batch = RenderObject::batches[i];
+        const auto &lastBatch = RenderObject::batches[i - (i > 0)];
+        if (i == 0 || batch.material->index != lastBatch.material->index) {
+            if (i != 0 && batch.material->index < Material::subpasses.size() - 1)
+                commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
+
+            commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[batch.material->index]));
+
+            if (Material::materialBuffer.sizes[batch.material->index] != 0)
                 commandBuffer[frameIndex].Append(
                     cmd::PushConstants(
                         renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
-                        Material::materialBuffer.offsets[i] / Material::materialBuffer.alignments[i] + j
+                        Material::materialBuffer.offsets[batch.material->index] /
+                                Material::materialBuffer.alignments[batch.material->index] +
+                            batch.material->variant
                     )
                 );
-
-            for (auto &&mesh : renderMeshes[i][j]) {
-                auto d = mesh->GetMeshMetaData();
-                int k = &mesh - &renderMeshes[i][j][0];
-                if (instanceBuffers[i][j][k])
-                    commandBuffer[frameIndex].Append(cmd::BindVertexBuffers(*instanceBuffers[i][j][k], 0, 1));
+        } else if (batch.material->variant != lastBatch.material->variant) {
+            if (Material::materialBuffer.sizes[batch.material->index] != 0)
                 commandBuffer[frameIndex].Append(
-                    cmd::DrawIndexed(d.indexCount, instanceCount[i][j][k], d.firstIndex, d.vertexOffset)
+                    cmd::PushConstants(
+                        renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
+                        Material::materialBuffer.offsets[batch.material->index] /
+                                Material::materialBuffer.alignments[batch.material->index] +
+                            batch.material->variant
+                    )
                 );
-            }
         }
-        if (i < Material::subpasses.size() - 1)
-            commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
+
+        RenderObject::batchBuffers[i].FlushBuffer(presentImageIndex);
+
+        auto d = batch.mesh->GetMeshMetaData();
+        commandBuffer[frameIndex].Append(
+            cmd::BindVertexBuffers(RenderObject::batchBuffers[i].GetBuffer(presentImageIndex), 0, 1),
+            cmd::DrawIndexed(d.indexCount, batch.instanceCount, d.firstIndex, d.vertexOffset)
+        );
     }
+    // for (int i = 0; i < Material::subpasses.size(); i++) {
+    //     commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[i]));
+    //     int variantCount = std::max(1U, Material::materialBuffer.sizes[i] / Material::materialBuffer.alignments[i]);
+    //     for (int j = 0; j < variantCount; j++) {
+    //         if (renderMeshes[i][j].size() == 0) continue;
+    //         if (Material::materialBuffer.sizes[i] != 0)
+    //             commandBuffer[frameIndex].Append(
+    //                 cmd::PushConstants(
+    //                     renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
+    //                     Material::materialBuffer.offsets[i] / Material::materialBuffer.alignments[i] + j
+    //                 )
+    //             );
+
+    //         for (auto &&mesh : renderMeshes[i][j]) {
+    //             auto d = mesh->GetMeshMetaData();
+    //             int k = &mesh - &renderMeshes[i][j][0];
+    //             if (instanceBuffers[i][j][k])
+    //                 commandBuffer[frameIndex].Append(cmd::BindVertexBuffers(*instanceBuffers[i][j][k], 0, 1));
+    //             commandBuffer[frameIndex].Append(
+    //                 cmd::DrawIndexed(d.indexCount, instanceCount[i][j][k], d.firstIndex, d.vertexOffset)
+    //             );
+    //         }
+    //     }
+    //     if (i < Material::subpasses.size() - 1)
+    //         commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
+    // }
 
     commandBuffer[frameIndex]
         .Append(cmd::EndRenderpass())
