@@ -11,10 +11,8 @@ Material::Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, con
     subpasses.emplace_back(std::move(subpass));
     dependecies.emplace_back(std::move(dependecy));
 
-    if (materialData) {
-        index = materialBuffer.Allocate(byteSize, byteSize);
-        materialBuffer.Write(index, materialData, byteSize);
-    }
+    index = materialBuffer.Allocate(byteSize, byteSize);
+    if (materialData) materialBuffer.Write(index, materialData, byteSize);
     materials.push_back(this);
 
     Renderer::RecreateRenderpass();

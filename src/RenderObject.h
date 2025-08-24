@@ -4,10 +4,12 @@
 #include "RenderBuffer.h"
 #include <algorithm>
 
+// TODO: Handle material/mesh being moved and pointers being invalidated.
 struct Batch {
     Material *material;
     Mesh *mesh;
-    uint32_t instanceCount = 0;
+    RenderBuffer batchBuffer;
+    std::vector<class RenderObject *> renderObjects;
 
     bool operator==(const Batch &o) const {
         return material->index == o.material->index && material->variant == o.material->variant &&
@@ -23,8 +25,6 @@ class RenderObject {
     friend class Renderer;
 
     static std::vector<Batch> batches;
-    static std::vector<RenderBuffer> batchBuffers;
-    static std::vector<RenderObject *> renderObjects;
     uint32_t batchIndex;
     uint32_t batchDataIndex;
 
@@ -38,6 +38,9 @@ class RenderObject {
     RenderObject(const RenderObject &) = delete;
     RenderObject &operator=(const RenderObject &) = delete;
     ~RenderObject();
+
+    Batch &GetBatch();
+    const Batch &GetBatch() const;
 
     void SetBatchData(const void *data, uint32_t byteSize);
     template <typename T> void SetBatchData(const T &data);

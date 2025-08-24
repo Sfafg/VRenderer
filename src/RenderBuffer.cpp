@@ -34,7 +34,7 @@ const vg::Buffer &RenderBuffer::GetBuffer(int index) const { return renderingBuf
 uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment) {
     bufferChangeFlag.Set(BufferChange::Contents);
     int currentSize = this->size;
-    int padding = (alignment - currentSize % alignment) % alignment;
+    int padding = alignment != 0 ? (alignment - currentSize % alignment) % alignment : 0;
 
     size += padding + byteSize;
     if (size >= stagingBuffer.GetSize()) Reserve(size);
@@ -59,7 +59,7 @@ void RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
     std::vector<uint32_t> newOffsets;
     newOffsets.reserve(sizes.size() - regionID);
     uint32_t baseOffset = offsets[regionID] + newByteSize;
-    
+
     for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
         uint32_t padding = GetPadding(i, baseOffset);
         baseOffset += padding;
@@ -95,15 +95,16 @@ void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
     uint32_t writeOffset = offsets[regionID];
     uint32_t removedSize = sizes[regionID];
 
-    for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
-        uint32_t padding = GetPadding(i, writeOffset);
-        writeOffset += padding;
+    if (removedSize != 0)
+        for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
+            uint32_t padding = GetPadding(i, writeOffset);
+            writeOffset += padding;
 
-        memcpy(stagingBuffer.MapMemory() + writeOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
+            memcpy(stagingBuffer.MapMemory() + writeOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
 
-        offsets[i] = writeOffset;
-        writeOffset += sizes[i];
-    }
+            offsets[i] = writeOffset;
+            writeOffset += sizes[i];
+        }
     sizes.erase(sizes.begin() + regionID);
     offsets.erase(offsets.begin() + regionID);
     alignments.erase(alignments.begin() + regionID);
@@ -126,10 +127,7 @@ void RenderBuffer::Reserve(uint32_t capacity) {
     std::swap(stagingBuffer, newBuffer);
 }
 
-void RenderBuffer::Erase(
-    uint32_t regionID, uint32_t eraseSize, uint32_t eraseOffset
-) 
-{
+void RenderBuffer::Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOffset) {
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Erase()");
     assert(
         eraseOffset + eraseSize <= sizes[regionID] &&
@@ -155,10 +153,10 @@ void RenderBuffer::Erase(
     for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
         uint32_t padding = GetPadding(i, baseOffset);
         baseOffset += padding;
-        
+
         // Przenieś dane regionu na nową pozycję
         memmove(stagingBuffer.MapMemory() + baseOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
-        
+
         // Aktualizuj offset regionu
         offsets[i] = baseOffset;
         baseOffset += sizes[i];
@@ -212,5 +210,6 @@ uint32_t RenderBuffer::Offset(uint32_t regionID) const {
 
 uint32_t RenderBuffer::GetPadding(uint32_t regionID, uint32_t offset) const {
     assert(regionID < alignments.size() && "Invalid regionID in GetPadding()");
+    if (alignments[regionID] == 0) return 0;
     return (alignments[regionID] - offset % alignments[regionID]) % alignments[regionID];
 }

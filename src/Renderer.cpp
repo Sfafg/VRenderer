@@ -128,7 +128,7 @@ void Renderer::Draw(const Mesh &mesh, const Material &material) {
 void Renderer::EndFrame() {
 
     for (int i = 0; i < RenderObject::batches.size(); i++) {
-        const auto &batch = RenderObject::batches[i];
+        auto &batch = RenderObject::batches[i];
         const auto &lastBatch = RenderObject::batches[i - (i > 0)];
         if (i == 0 || batch.material->index != lastBatch.material->index) {
             if (i != 0 && batch.material->index < Material::subpasses.size() - 1)
@@ -157,12 +157,12 @@ void Renderer::EndFrame() {
                 );
         }
 
-        RenderObject::batchBuffers[i].FlushBuffer(presentImageIndex);
+        batch.batchBuffer.FlushBuffer(presentImageIndex);
 
         auto d = batch.mesh->GetMeshMetaData();
         commandBuffer[frameIndex].Append(
-            cmd::BindVertexBuffers(RenderObject::batchBuffers[i].GetBuffer(presentImageIndex), 0, 1),
-            cmd::DrawIndexed(d.indexCount, batch.instanceCount, d.firstIndex, d.vertexOffset)
+            cmd::BindVertexBuffers(batch.batchBuffer.GetBuffer(presentImageIndex), 0, 1),
+            cmd::DrawIndexed(d.indexCount, batch.renderObjects.size(), d.firstIndex, d.vertexOffset)
         );
     }
     // for (int i = 0; i < Material::subpasses.size(); i++) {

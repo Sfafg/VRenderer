@@ -136,6 +136,10 @@ int main() {
 
         renderObjects[i] = RenderObject(&testMesh, &mat1, matrix);
         renderObjects2[i] = RenderObject(&testMesh2, &mat3, matrix);
+        if (i == 0) {
+            renderObjects[i].GetBatch().batchBuffer.Reserve(sizeof(glm::mat4) * 1000);
+            renderObjects[i].GetBatch().batchBuffer.Reserve(sizeof(glm::mat4) * 1000);
+        }
     }
 
     glm::dvec2 lastMouseP;
@@ -208,10 +212,6 @@ int main() {
         mat3.Write((float)abs(sin(t)));
         Renderer::SetPassData({.viewProjection = proj * view});
         Renderer::StartFrame();
-        // // Renderer::Draw(testMesh, mat1, instanceBuffer, 1000);
-        // // Renderer::Draw(testMesh2, mat3, instanceBuffer, 1000);
-        // Renderer::Draw(testMesh1, mat4);
-        // Renderer::Draw(testMesh1, mat2);
         Renderer::EndFrame();
         Renderer::Present(generalQueue);
     }

@@ -1,4 +1,5 @@
 #include "RenderObject.h"
+#include "Buffer.h"
 
 RenderObject::RenderObject(Mesh *mesh, Material *material, uint32_t batchDataByteSize, const void *data) {
     Batch t{material, mesh};
@@ -6,19 +7,13 @@ RenderObject::RenderObject(Mesh *mesh, Material *material, uint32_t batchDataByt
 
     batchIndex = (it - batches.begin());
     if (it == batches.end() || *it != t) {
-        batches.insert(it, t);
-        batchBuffers.emplace(
-            batchBuffers.begin() + batchIndex,
-            RenderBuffer(batchDataByteSize + (batchDataByteSize == 0), vg::BufferUsage::VertexBuffer)
-        );
+        t.batchBuffer = RenderBuffer(batchDataByteSize + (batchDataByteSize == 0), vg::BufferUsage::VertexBuffer);
+        batches.emplace(it, std::move(t));
     }
-    batches[batchIndex].instanceCount++;
-    renderObjects.push_back(this);
+    batches[batchIndex].renderObjects.push_back(this);
 
-    if (batchDataByteSize != 0) {
-        batchDataIndex = batchBuffers[batchIndex].Allocate(batchDataByteSize, batchDataByteSize);
-        if (data) batchBuffers[batchIndex].Write(batchDataIndex, data, batchDataByteSize);
-    }
+    batchDataIndex = batches[batchIndex].batchBuffer.Allocate(batchDataByteSize, batchDataByteSize);
+    if (data) batches[batchIndex].batchBuffer.Write(batchDataIndex, data, batchDataByteSize);
 }
 
 RenderObject::RenderObject() : batchIndex(-1U), batchDataIndex(0) {}
@@ -26,14 +21,17 @@ RenderObject::RenderObject() : batchIndex(-1U), batchDataIndex(0) {}
 RenderObject::RenderObject(RenderObject &&o) {
     std::swap(batchIndex, o.batchIndex);
     std::swap(batchDataIndex, o.batchDataIndex);
-    if (batchIndex != -1U) renderObjects[batchIndex] = this;
+    if (batchIndex != -1U) batches[batchIndex].renderObjects[batchDataIndex] = this;
 }
 
 RenderObject &RenderObject::operator=(RenderObject &&o) {
     if (this == &o) return *this;
 
-    if (batchIndex != -1U && o.batchIndex != -1U) std::swap(renderObjects[batchIndex], renderObjects[o.batchIndex]);
-    else if (o.batchIndex != -1U) renderObjects[o.batchIndex] = this;
+    if (batchIndex != -1U && o.batchIndex != -1U) {
+        std::swap(
+            batches[batchIndex].renderObjects[batchDataIndex], batches[o.batchIndex].renderObjects[o.batchDataIndex]
+        );
+    } else if (o.batchIndex != -1U) batches[o.batchIndex].renderObjects[o.batchDataIndex] = this;
 
     std::swap(batchIndex, o.batchIndex);
     std::swap(batchDataIndex, o.batchDataIndex);
@@ -44,24 +42,32 @@ RenderObject &RenderObject::operator=(RenderObject &&o) {
 RenderObject::~RenderObject() {
     if (batchIndex == -1U) return;
 
-    batches[batchIndex].instanceCount--;
-    batchBuffers[batchIndex].Deallocate(batchIndex);
-    renderObjects.erase(renderObjects.begin() + batchIndex);
-    for (int i = batchIndex; i < renderObjects.size(); i++) renderObjects[i]->batchDataIndex--;
+    batches[batchIndex].batchBuffer.Deallocate(batchDataIndex);
+    batches[batchIndex].renderObjects.erase(batches[batchIndex].renderObjects.begin() + batchDataIndex);
+    for (int i = batchDataIndex; i < batches[batchIndex].renderObjects.size(); i++)
+        batches[batchIndex].renderObjects[i]->batchDataIndex--;
+
+    if (batches[batchIndex].renderObjects.size() == 0) {
+        batches.erase(batches.begin() + batchIndex);
+        for (int i = batchIndex; i < batches.size(); i++)
+            for (auto &&ro : batches[i].renderObjects) ro->batchIndex--;
+    }
+
     batchIndex = -1U;
 }
 
+Batch &RenderObject::GetBatch() { return batches[batchIndex]; }
+const Batch &RenderObject::GetBatch() const { return batches[batchIndex]; }
+
 void RenderObject::SetBatchData(const void *data, uint32_t byteSize) {
-    auto &batchBuffer = batchBuffers[batchIndex];
+    auto &batchBuffer = batches[batchIndex].batchBuffer;
     if (batchBuffer.Size(batchDataIndex) != byteSize) batchBuffer.Reallocate(batchDataIndex, byteSize);
     batchBuffer.Write(batchDataIndex, data, byteSize);
 }
 
 void RenderObject::ReadBatchData(void *data) {
-    auto &batchBuffer = batchBuffers[batchIndex];
+    auto &batchBuffer = batches[batchIndex].batchBuffer;
     batchBuffer.Read(batchDataIndex, data);
 }
 
 std::vector<Batch> RenderObject::batches;
-std::vector<RenderBuffer> RenderObject::batchBuffers;
-std::vector<RenderObject *> RenderObject::renderObjects;
