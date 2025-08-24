@@ -6,7 +6,7 @@ using namespace vg;
 void Renderer::RecreateRenderpass() {
     if (!IsInitialized()) return;
 
-    if (Material::subpasses.size() == 0) return;
+    if (Material::subpasses.size() == 0 || swapchain.GetImageCount() == 0) return;
 
     renderPass = RenderPass(
         {Attachment(surface.GetFormat(), ImageLayout::PresentSrc)},

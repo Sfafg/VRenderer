@@ -11,7 +11,7 @@ RenderObject::RenderObject(Mesh *mesh, Material *material, uint32_t batchDataByt
         batches.emplace(it, std::move(t));
 
         for (int i = batchIndex + 1; i < batches.size(); i++)
-            for (auto &&ro : batches[i].renderObjects) ro->batchIndex--;
+            for (auto &&ro : batches[i].renderObjects) ro->batchIndex++;
     }
     batches[batchIndex].renderObjects.push_back(this);
 
@@ -45,12 +45,12 @@ RenderObject &RenderObject::operator=(RenderObject &&o) {
 RenderObject::~RenderObject() {
     if (batchIndex == -1U) return;
 
-    batches[batchIndex].batchBuffer.Deallocate(batchDataIndex);
-    batches[batchIndex].renderObjects.erase(batches[batchIndex].renderObjects.begin() + batchDataIndex);
-    for (int i = batchDataIndex; i < batches[batchIndex].renderObjects.size(); i++)
-        batches[batchIndex].renderObjects[i]->batchDataIndex--;
+    auto &batch = GetBatch();
+    batch.batchBuffer.Deallocate(batchDataIndex);
+    batch.renderObjects.erase(batch.renderObjects.begin() + batchDataIndex);
+    for (int i = batchDataIndex; i < batch.renderObjects.size(); i++) batch.renderObjects[i]->batchDataIndex--;
 
-    if (batches[batchIndex].renderObjects.size() == 0) {
+    if (batch.renderObjects.size() == 0) {
         batches.erase(batches.begin() + batchIndex);
         for (int i = batchIndex; i < batches.size(); i++)
             for (auto &&ro : batches[i].renderObjects) ro->batchIndex--;

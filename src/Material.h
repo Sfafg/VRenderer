@@ -11,8 +11,6 @@ class Material {
     friend class RenderObject;
     friend class Batch;
 
-    // TODO: W destruktorze zmienić aby usuwała się tylko porcja danych wariantu, chyba że jest to ostatni wariant
-    // materiału to cały region.
     static std::vector<vg::Subpass> subpasses;
     static std::vector<vg::SubpassDependency> dependecies;
     static std::vector<Material *> materials;

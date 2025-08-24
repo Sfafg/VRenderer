@@ -100,9 +100,13 @@ Material::~Material() {
     if (index == (uint16_t)-1) return;
     bool lastVariant = materialBuffer.Size(index) == materialBuffer.Alignment(index);
 
+    materials.erase(materials.begin() + index);
     if (lastVariant) {
         materialBuffer.Deallocate(index);
+        subpasses.erase(subpasses.begin() + index);
+        dependecies.erase(dependecies.begin() + index);
         for (int i = index; i < materials.size(); i++) materials[i]->index--;
+        Renderer::RecreateRenderpass();
     } else {
         uint32_t variantSize = materialBuffer.Alignment(index);
         uint32_t variantOffset = variant * variantSize;
@@ -110,11 +114,10 @@ Material::~Material() {
 
         // Zaktualizuj numery wariantów dla materiałów o wyższych wariantach
         for (Material *mat : materials) {
-            if (mat->index == index && mat->variant > variant) mat->variant--; 
+            if (mat->index == index && mat->variant > variant) mat->variant--;
         }
     }
     index = -1;
-    Renderer::RecreateRenderpass();
 }
 
 void Material::Write(const void *data, uint32_t dataSize, uint32_t offset) {
