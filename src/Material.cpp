@@ -110,7 +110,7 @@ Material::~Material() {
 
         // Zaktualizuj numery wariantów dla materiałów o wyższych wariantach
         for (Material *mat : materials) {
-            if (mat->index == index && mat->variant > variant) { mat->variant--; }
+            if (mat->index == index && mat->variant > variant) mat->variant--; 
         }
     }
     index = -1;
