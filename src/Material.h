@@ -2,6 +2,7 @@
 #include "VG/VG.h"
 #include <iostream>
 #include "RenderBuffer.h"
+#include "RenderObject.h"
 
 /**
  * @brief Class used to represent a material used for rendering.
@@ -15,6 +16,7 @@ class Material {
     static std::vector<vg::SubpassDependency> dependecies;
     static std::vector<Material *> materials;
     static RenderBuffer materialBuffer;
+    std::vector<Batch *> batches;
 
     uint16_t index;
     uint16_t variant;

@@ -1,5 +1,6 @@
 #pragma once
 #include "RenderBuffer.h"
+#include "RenderObject.h"
 #include <vector>
 
 class Mesh {
@@ -17,6 +18,7 @@ class Mesh {
     static RenderBuffer indexBuffer;
     static RenderBuffer meshDataBuffer;
     static std::vector<Mesh *> meshes;
+    std::vector<Batch *> batches;
 
     uint32_t index;
 

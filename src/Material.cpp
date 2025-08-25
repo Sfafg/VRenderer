@@ -82,6 +82,7 @@ Material::Material(Material &&o) : Material() {
     std::swap(index, o.index);
     std::swap(variant, o.variant);
     if (index != (uint16_t)-1) materials[index] = this;
+    for (auto &batch : batches) batch->material = this;
 }
 
 Material &Material::operator=(Material &&o) {
@@ -92,6 +93,7 @@ Material &Material::operator=(Material &&o) {
 
     std::swap(index, o.index);
     std::swap(variant, o.variant);
+    for (auto &batch : batches) batch->material = this;
 
     return *this;
 }
@@ -117,6 +119,7 @@ Material::~Material() {
             if (mat->index == index && mat->variant > variant) mat->variant--;
         }
     }
+    for (auto &batch : batches) batch->material = nullptr;
     index = -1;
 }
 

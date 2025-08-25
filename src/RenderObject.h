@@ -1,28 +1,23 @@
 #pragma once
-#include "Mesh.h"
-#include "Material.h"
 #include "RenderBuffer.h"
-#include <algorithm>
 
-// TODO: Handle material/mesh being moved and pointers being invalidated.
 struct Batch {
-    Material *material;
-    Mesh *mesh;
+    class Material *material;
+    class Mesh *mesh;
     RenderBuffer batchBuffer;
     std::vector<class RenderObject *> renderObjects;
 
-    bool operator==(const Batch &o) const {
-        return material->index == o.material->index && material->variant == o.material->variant &&
-               mesh->index == o.mesh->index;
-    }
-    bool operator<(const Batch &o) const {
-        if (material->index < o.material->index) return true;
-        if (material->index > o.material->index) return false;
+    Batch(class Material *material, class Mesh *mesh);
 
-        if (material->variant < o.material->variant) return true;
-        if (material->variant > o.material->variant) return false;
-        return mesh->index < o.mesh->index;
-    }
+    Batch();
+    Batch(Batch &&);
+    Batch &operator=(Batch &&);
+    Batch(const Batch &) = delete;
+    Batch &operator=(const Batch &) = delete;
+    ~Batch();
+
+    bool operator==(const Batch &o) const;
+    bool operator<(const Batch &o) const;
 };
 
 class RenderObject {
@@ -33,8 +28,10 @@ class RenderObject {
     uint32_t batchDataIndex;
 
   public:
-    RenderObject(Mesh *mesh, Material *material, uint32_t batchDataByteSize = 0, const void *data = nullptr);
-    template <typename T> RenderObject(Mesh *mesh, Material *material, const T &batchData);
+    RenderObject(
+        class Mesh *mesh, class Material *material, uint32_t batchDataByteSize = 0, const void *data = nullptr
+    );
+    template <typename T> RenderObject(class Mesh *mesh, class Material *material, const T &batchData);
 
     RenderObject();
     RenderObject(RenderObject &&);
@@ -54,7 +51,7 @@ class RenderObject {
 };
 
 template <typename T>
-RenderObject::RenderObject(Mesh *mesh, Material *material, const T &batchData)
+RenderObject::RenderObject(class Mesh *mesh, class Material *material, const T &batchData)
     : RenderObject(mesh, material, sizeof(T), &batchData) {}
 
 template <typename T> void RenderObject::SetBatchData(const T &data) { return SetBatchData(&data, sizeof(T)); }
