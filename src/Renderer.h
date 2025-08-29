@@ -17,6 +17,7 @@ class Renderer {
     static std::vector<vg::Framebuffer> framebuffers;
     static vg::DescriptorPool descriptorPool;
     static std::vector<vg::DescriptorSet> descriptorSets;
+    static std::vector<vg::DescriptorSet> fullDescriptorSets;
     static std::vector<vg::CmdBuffer> commandBuffer;
     static std::vector<vg::Semaphore> renderFinishedSemaphore;
     static std::vector<vg::Semaphore> imageAvailableSemaphore;

@@ -1,12 +1,6 @@
 #include "Mesh.h"
 
 Mesh::Mesh(int vertexCount, int vertexByteSize, void *vertexData, int indexCount, int indexByteSize, void *indexData) {
-    if ((vg::Buffer &)meshDataBuffer == vg::BufferHandle()) {
-        meshDataBuffer = RenderBuffer(sizeof(MeshMetaData), vg::BufferUsage::StorageBuffer);
-        vertexBuffer = RenderBuffer(vertexCount * vertexByteSize, vg::BufferUsage::VertexBuffer);
-        indexBuffer = RenderBuffer(indexCount * indexByteSize, vg::BufferUsage::IndexBuffer);
-    }
-
     MeshMetaData meshData(
         indexCount, indexBuffer.GetSize() / indexByteSize, std::ceil(vertexBuffer.GetSize() / (float)vertexByteSize)
     );
@@ -112,7 +106,7 @@ void Mesh::WriteIndexData(const void *indexData, uint32_t byteSize, uint32_t byt
     indexBuffer.Write(index, indexData, byteSize, byteOffset);
 }
 
-RenderBuffer Mesh::meshDataBuffer;
-RenderBuffer Mesh::vertexBuffer;
-RenderBuffer Mesh::indexBuffer;
+RenderBuffer Mesh::meshDataBuffer(vg::BufferUsage::StorageBuffer);
+RenderBuffer Mesh::vertexBuffer(vg::BufferUsage::VertexBuffer);
+RenderBuffer Mesh::indexBuffer(vg::BufferUsage::IndexBuffer);
 std::vector<Mesh *> Mesh::meshes;

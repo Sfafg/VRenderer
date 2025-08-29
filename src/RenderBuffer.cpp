@@ -2,12 +2,16 @@
 
 RenderBuffer::RenderBuffer() {}
 
-RenderBuffer::RenderBuffer(uint32_t capacity, vg::Flags<vg::BufferUsage> bufferUsage)
-    : renderingBuffer{vg::Buffer(capacity, bufferUsage), vg::Buffer(capacity, bufferUsage)},
-      stagingBuffer(capacity, bufferUsage), size(0), bufferUsage(bufferUsage) {
-    vg::Allocate(renderingBuffer[0], {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
-    vg::Allocate(renderingBuffer[1], {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
-    vg::Allocate(stagingBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+RenderBuffer::RenderBuffer(vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capacity)
+    : size(0), bufferUsage(bufferUsage) {
+    if (capacity != 0) {
+        stagingBuffer = vg::Buffer(capacity, bufferUsage);
+        renderingBuffer[0] = vg::Buffer(capacity, bufferUsage);
+        renderingBuffer[1] = vg::Buffer(capacity, bufferUsage);
+        vg::Allocate(renderingBuffer[0], {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+        vg::Allocate(renderingBuffer[1], {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+        vg::Allocate(stagingBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+    }
 }
 
 RenderBuffer::~RenderBuffer() {}
@@ -48,10 +52,6 @@ uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment) {
 
 void RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Reallocate()");
-    assert(
-        newByteSize > 0 &&
-        "New byte size must be greater than 0 in RenderBuffer::Reallocate(), to deallocate use Deallocate()"
-    );
 
     int32_t delta = (int32_t)(newByteSize) - (int32_t)(sizes[regionID]);
     if (delta == 0) return;
@@ -122,7 +122,7 @@ void RenderBuffer::Reserve(uint32_t capacity) {
 
     vg::Buffer newBuffer(capacity, bufferUsage);
     vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
-    memcpy(newBuffer.MapMemory(), stagingBuffer.MapMemory(), stagingBuffer.GetSize());
+    if (stagingBuffer.GetSize() > 0) memcpy(newBuffer.MapMemory(), stagingBuffer.MapMemory(), stagingBuffer.GetSize());
 
     std::swap(stagingBuffer, newBuffer);
 }

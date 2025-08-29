@@ -33,13 +33,9 @@ class RenderBuffer {
     vg::Buffer stagingBuffer;
     vg::Flags<BufferChange> bufferChangeFlag;
 
-    bool FlushBuffer(int index);
-    vg::Buffer &GetBuffer(int index);
-    const vg::Buffer &GetBuffer(int index) const;
-
   public:
     RenderBuffer();
-    RenderBuffer(uint32_t capacity, vg::Flags<vg::BufferUsage> bufferUsage);
+    RenderBuffer(vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capacity = 0);
     RenderBuffer(RenderBuffer &&) = default;
     RenderBuffer &operator=(RenderBuffer &&) = default;
     RenderBuffer(const RenderBuffer &) = delete;
@@ -80,6 +76,10 @@ class RenderBuffer {
     uint32_t Alignment(uint32_t regionID) const;
     uint32_t Offset(uint32_t regionID) const;
     uint32_t GetPadding(uint32_t regionID, uint32_t offset) const;
+
+    bool FlushBuffer(int index);
+    vg::Buffer &GetBuffer(int index);
+    const vg::Buffer &GetBuffer(int index) const;
 
     friend class Renderer;
     friend class Material;

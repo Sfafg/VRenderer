@@ -1,29 +1,18 @@
 #pragma once
 #include "RenderBuffer.h"
-
-struct Batch {
-    class Material *material;
-    class Mesh *mesh;
-    RenderBuffer batchBuffer;
-    std::vector<class RenderObject *> renderObjects;
-
-    Batch(class Material *material, class Mesh *mesh);
-
-    Batch();
-    Batch(Batch &&);
-    Batch &operator=(Batch &&);
-    Batch(const Batch &) = delete;
-    Batch &operator=(const Batch &) = delete;
-    ~Batch();
-
-    bool operator==(const Batch &o) const;
-    bool operator<(const Batch &o) const;
-};
+#include "Batch.h"
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
 
 class RenderObject {
     friend class Renderer;
+    friend class Batch;
+    friend class GPURenderSystem;
 
     static std::vector<Batch> batches;
+    static RenderBuffer objectDataBuffer;
+    static RenderBuffer instanceMapping;
     uint32_t batchIndex;
     uint32_t batchDataIndex;
 

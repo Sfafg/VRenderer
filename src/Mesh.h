@@ -7,6 +7,7 @@ class Mesh {
     friend class Renderer;
     friend class RenderObject;
     friend class Batch;
+    friend class GPURenderSystem;
 
     struct MeshMetaData {
         uint32_t indexCount;
