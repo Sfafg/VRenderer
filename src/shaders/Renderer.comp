@@ -47,11 +47,11 @@ layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
 void main() 
 {
     uint sourceObjectIndex = gl_GlobalInvocationID.x;
-    if(sourceObjectIndex > objectCount) return;
+    if(sourceObjectIndex >= objectCount) return;
 
     uint batchID = 0;
     for(uint i = batchCount-1; i != -1U; i--)
-        if(sourceObjectIndex > batchMetaData[i].firstInstance){
+        if(sourceObjectIndex >= batchMetaData[i].firstInstance){
             batchID = i;
             break;
         }

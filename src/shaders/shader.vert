@@ -33,7 +33,7 @@ void main() {
 
     BatchMetaData batch;
     for(int i = 1; i >= 0; i--)
-        if(objectIndex > batchMetaData[i].firstInstance){
+        if(objectIndex >= batchMetaData[i].firstInstance){
             batch= batchMetaData[i] ;
             break;
         }
