@@ -20,6 +20,11 @@ int glfwCreateWindowSurface(VkInstance instance, GLFWwindow *window, const void 
 float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (max - min) + min; }
 
 GLFWwindow *CreateWindow() {
+#ifndef NDEBUG
+#ifdef __linux__
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
+#endif
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     // glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
