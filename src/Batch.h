@@ -1,28 +1,49 @@
 #pragma once
 #include "RenderBuffer.h"
-struct Batch {
-    struct BatchMetaData {
-        uint firstInstace;
-        uint batchDataElementSize;
-        uint materialIndex;
-        uint meshIndex;
-    };
-    static RenderBuffer batchMetaData;
-    static RenderBuffer drawCallBuffer;
 
-    class Material *material;
-    class Mesh *mesh;
-    std::vector<class RenderObject *> renderObjects;
+class Material;
+class Mesh;
+class RenderObject;
 
-    Batch(class Material *material, class Mesh *mesh, uint32_t batchDataElementSize);
-
+class Batch {
+  private:
     Batch();
-    Batch(Batch &&);
-    Batch &operator=(Batch &&);
-    Batch(const Batch &) = delete;
-    Batch &operator=(const Batch &) = delete;
-    ~Batch();
 
-    bool operator==(const std::tuple<class Material *, class Mesh *> &o) const;
-    bool operator<(const std::tuple<class Material *, class Mesh *> &o) const;
+  public:
+    static std::vector<Batch> batches;
+    static std::vector<std::tuple<uint16_t, uint16_t>> materialIndices;
+    static RenderBuffer drawCallBuffer;
+    static RenderBuffer instanceMappingBuffer;
+
+    static std::vector<std::vector<RenderObject *>> renderObjects;
+    static RenderBuffer objectBuffer;
+
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    uint vertexOffset;
+    uint firstInstance;
+    uint materialIndex = -1U;
+    uint meshIndex = -1U;
+    uint batchDataElementSize;
+
+    static std::tuple<uint, bool> Add(Material *material, Mesh *mesh, uint objectByteSize);
+    static std::tuple<uint, bool> Get(Material *material, Mesh *mesh);
+    static void Remove(uint index);
+    static void ReserveObjects(uint batchIndex, uint objectCount);
+
+    bool operator==(const std::tuple<Material *, Mesh *> &o) const;
+    bool operator<(const std::tuple<Material *, Mesh *> &o) const;
+
+  private:
+    friend Mesh;
+    friend Material;
+    friend RenderObject;
+
+    static void NotifyMaterialDestroy(uint index);
+    static void NotifyVariantDestroy(uint materialIndex, uint index);
+    static void NotifyMeshDestroy(uint index);
+
+    static void AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize);
+    static void RemoveObject(RenderObject *renderObject);
 };

@@ -1,5 +1,6 @@
 #include "Material.h"
 #include "Renderer.h"
+#include "Batch.h"
 #include <cassert>
 
 Material::Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize)
@@ -79,7 +80,6 @@ Material::Material(Material &&o) : Material() {
     std::swap(index, o.index);
     std::swap(variant, o.variant);
     if (index != (uint16_t)-1) materials[index] = this;
-    for (auto &batch : batches) batch->material = this;
 }
 
 Material &Material::operator=(Material &&o) {
@@ -90,7 +90,6 @@ Material &Material::operator=(Material &&o) {
 
     std::swap(index, o.index);
     std::swap(variant, o.variant);
-    for (auto &batch : batches) batch->material = this;
 
     return *this;
 }
@@ -101,12 +100,14 @@ Material::~Material() {
 
     materials.erase(materials.begin() + index);
     if (lastVariant) {
+        Batch::NotifyMaterialDestroy(index);
         materialBuffer.Deallocate(index);
         subpasses.erase(subpasses.begin() + index);
         dependecies.erase(dependecies.begin() + index);
         for (int i = index; i < materials.size(); i++) materials[i]->index--;
         Renderer::RecreateRenderpass();
     } else {
+        Batch::NotifyVariantDestroy(index, variant);
         uint32_t variantSize = materialBuffer.Alignment(index);
         uint32_t variantOffset = variant * variantSize;
         materialBuffer.Erase(index, variantSize, variantOffset);
@@ -116,7 +117,6 @@ Material::~Material() {
             if (mat->index == index && mat->variant > variant) mat->variant--;
         }
     }
-    for (auto &batch : batches) batch->material = nullptr;
     index = -1;
 }
 

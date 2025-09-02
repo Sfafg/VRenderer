@@ -1,24 +1,19 @@
 #version 450
 
-struct BatchMetaData
-{
-    uint firstInstance;
-    uint batchDataElementSize;
-    uint materialIndex;
-    uint meshIndex;
-};
-
-struct DrawIndexed 
+struct DrawCall 
 {
     uint indexCount;
     uint instanceCount;
     uint firstIndex;
     uint vertexOffset;
     uint firstInstance;
+    uint materialIndex ;
+    uint meshIndex ;
+    uint batchDataElementSize;
 };
 
 layout(push_constant) uniform PushConstants{
-    uint batchCount;
+    uint drawCount;
     uint objectCount;
 };
 
@@ -28,13 +23,9 @@ layout(push_constant) uniform PushConstants{
 //     mat4 viewProjection;
 // };
 
-layout(std430, binding = 1) readonly buffer BatchMetaDatass{
-    BatchMetaData batchMetaData[];
-};
-
 // MeshMetaDAt
-layout(std430, binding = 2) buffer DrawInstructions{
-    DrawIndexed drawInstructions[];
+layout(std430, binding = 2) buffer DrawCalls{
+    DrawCall drawCalls[];
 };
 
 layout(std430, binding = 3) buffer InstanceMapping{
@@ -49,13 +40,13 @@ void main()
     uint sourceObjectIndex = gl_GlobalInvocationID.x;
     if(sourceObjectIndex >= objectCount) return;
 
-    uint batchID = 0;
-    for(uint i = batchCount-1; i != -1U; i--)
-        if(sourceObjectIndex >= batchMetaData[i].firstInstance){
-            batchID = i;
+    uint drawID = 0;
+    for(uint i = drawCount-1; i != -1U; i--)
+        if(sourceObjectIndex >= drawCalls[i].firstInstance){
+            drawID = i;
             break;
         }
 
-    uint targetObjectIndex = atomicAdd(drawInstructions[batchID].instanceCount,1) + drawInstructions[batchID].firstInstance;
+    uint targetObjectIndex = atomicAdd(drawCalls[drawID].instanceCount,1) + drawCalls[drawID].firstInstance;
     instanceMapping[targetObjectIndex] = sourceObjectIndex;
 }

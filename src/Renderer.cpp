@@ -87,9 +87,8 @@ void Renderer::RenderFrame() {
     Mesh::vertexBuffer.FlushBuffer(imageIndex);
     Mesh::indexBuffer.FlushBuffer(imageIndex);
     Mesh::meshDataBuffer.FlushBuffer(imageIndex);
-    RenderObject::objectDataBuffer.FlushBuffer(imageIndex);
-    RenderObject::instanceMapping.FlushBuffer(imageIndex);
-    Batch::batchMetaData.FlushBuffer(imageIndex);
+    Batch::objectBuffer.FlushBuffer(imageIndex);
+    Batch::instanceMappingBuffer.FlushBuffer(imageIndex);
     Batch::drawCallBuffer.FlushBuffer(imageIndex);
     Material::materialBuffer.FlushBuffer(imageIndex);
 
@@ -97,17 +96,17 @@ void Renderer::RenderFrame() {
         DescriptorType::StorageBuffer, Material::materialBuffer.GetBuffer(imageIndex), 0, -1, 1, 0
     );
     descriptorSets[imageIndex].AttachBuffer(
-        DescriptorType::StorageBuffer, RenderObject::objectDataBuffer.GetBuffer(imageIndex), 0, -1, 2, 0
+        DescriptorType::StorageBuffer, Batch::objectBuffer.GetBuffer(imageIndex), 0, -1, 2, 0
     );
     descriptorSets[imageIndex].AttachBuffer(
-        DescriptorType::StorageBuffer, Batch::batchMetaData.GetBuffer(imageIndex), 0, -1, 3, 0
+        DescriptorType::StorageBuffer, Batch::drawCallBuffer.GetBuffer(imageIndex), 0, -1, 3, 0
     );
 
     commandBuffer[frameIndex].Clear().Begin();
 
     GPURenderSystem::AttachBuffers(
-        imageIndex, Batch::batchMetaData.GetBuffer(imageIndex), Mesh::meshDataBuffer.GetBuffer(imageIndex),
-        Batch::drawCallBuffer.GetBuffer(imageIndex), RenderObject::instanceMapping.GetBuffer(imageIndex)
+        imageIndex, Mesh::meshDataBuffer.GetBuffer(imageIndex), Batch::drawCallBuffer.GetBuffer(imageIndex),
+        Batch::instanceMappingBuffer.GetBuffer(imageIndex)
     );
     GPURenderSystem::RecordCommands(commandBuffer[frameIndex], imageIndex);
 
@@ -125,7 +124,7 @@ void Renderer::RenderFrame() {
             cmd::BindVertexBuffers(
                 {
                     (vg::BufferHandle)Mesh::vertexBuffer.GetBuffer(imageIndex),
-                    (vg::BufferHandle)RenderObject::instanceMapping.GetBuffer(imageIndex),
+                    (vg::BufferHandle)Batch::instanceMappingBuffer.GetBuffer(imageIndex),
                 },
                 {0, 0}
             ),
@@ -136,8 +135,8 @@ void Renderer::RenderFrame() {
                 renderPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[imageIndex]}
             ),
             cmd::DrawIndexedIndirect(
-                Batch::drawCallBuffer.GetBuffer(imageIndex), 0,
-                Batch::drawCallBuffer.GetSize() / sizeof(cmd::DrawIndexed), sizeof(cmd::DrawIndexed)
+                Batch::drawCallBuffer.GetBuffer(imageIndex), 0, Batch::drawCallBuffer.GetSize() / sizeof(Batch),
+                sizeof(Batch)
             ),
             cmd::EndRenderpass()
         )

@@ -1,41 +1,33 @@
 #version 450
 
-struct BatchMetaData {
-    uint firstInstance;
-    uint batchDataElementSize;
-    uint materialIndex;
-    uint meshIndex;
-};
-
 struct MeshMetaData {
     uint indexCount;
     uint firstIndex;
     uint vertexOffset;
 };
 
-struct DrawIndexed 
+struct DrawCall 
 {
     uint indexCount;
     uint instanceCount;
     uint firstIndex;
     uint vertexOffset;
     uint firstInstance;
+    uint materialIndex ;
+    uint meshIndex ;
+    uint batchDataElementSize;
 };
 
 layout(push_constant) uniform PushConstants{
     uint batchCount;
 };
 
-layout(std430, binding = 0) readonly buffer BatchMetaDatas{
-    BatchMetaData batchMetaData[];
-};
-
-layout(std430, binding = 1) readonly buffer MeshMetaDatas{
+layout(std430, binding = 0) readonly buffer MeshMetaDatas{
     MeshMetaData meshMetaData[];
 };
 
-layout(std430, binding = 2) buffer DrawInstructions{
-    DrawIndexed drawInstructions[];
+layout(std430, binding = 1) buffer DrawCalls{
+    DrawCall drawCalls[];
 };
 
 layout (local_size_x = 16, local_size_y = 1, local_size_z = 1) in;
@@ -45,12 +37,10 @@ void main()
 	if(index >= batchCount)
 		return;
 		
-    BatchMetaData batch =batchMetaData[index];
-    MeshMetaData mesh=meshMetaData[batch.meshIndex];
+    MeshMetaData mesh = meshMetaData[drawCalls[index].meshIndex];
 
-	drawInstructions[index].indexCount = mesh.indexCount;
-	drawInstructions[index].instanceCount = 0;
-	drawInstructions[index].firstIndex = mesh.firstIndex;
-	drawInstructions[index].vertexOffset = mesh.vertexOffset;
-	drawInstructions[index].firstInstance = batch.firstInstance;
+	drawCalls[index].indexCount = mesh.indexCount;
+	drawCalls[index].instanceCount = 0;
+	drawCalls[index].firstIndex = mesh.firstIndex;
+	drawCalls[index].vertexOffset = mesh.vertexOffset;
 }

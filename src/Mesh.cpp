@@ -1,4 +1,5 @@
 #include "Mesh.h"
+#include "Batch.h"
 
 Mesh::Mesh(int vertexCount, int vertexByteSize, void *vertexData, int indexCount, int indexByteSize, void *indexData) {
     MeshMetaData meshData(
@@ -19,7 +20,6 @@ Mesh::Mesh() : index(-1U) {}
 Mesh::Mesh(Mesh &&o) {
     std::swap(index, o.index);
     if (index != -1U) meshes[index] = this;
-    for (auto &batch : batches) batch->mesh = this;
 }
 
 Mesh &Mesh::operator=(Mesh &&o) {
@@ -29,13 +29,13 @@ Mesh &Mesh::operator=(Mesh &&o) {
     else if (o.index != -1U) meshes[o.index] = this;
 
     std::swap(index, o.index);
-    for (auto &batch : batches) batch->mesh = this;
 
     return *this;
 }
 
 Mesh::~Mesh() {
     if (index == -1U) return;
+    Batch::NotifyMeshDestroy(index);
 
     meshDataBuffer.Deallocate(index);
     vertexBuffer.Deallocate(index);
@@ -43,7 +43,6 @@ Mesh::~Mesh() {
     meshes.erase(meshes.begin() + index);
     for (int i = index; i < meshes.size(); i++) meshes[i]->index--;
     index = -1U;
-    for (auto &batch : batches) batch->mesh = nullptr;
 }
 
 Mesh::MeshMetaData Mesh::GetMeshMetaData() const { return meshDataBuffer.Read<MeshMetaData>(index); }

@@ -10,16 +10,11 @@ class RenderObject {
     friend class Batch;
     friend class GPURenderSystem;
 
-    static std::vector<Batch> batches;
-    static RenderBuffer objectDataBuffer;
-    static RenderBuffer instanceMapping;
     uint32_t batchIndex;
-    uint32_t batchDataIndex;
+    uint32_t objectDataIndex;
 
   public:
-    RenderObject(
-        class Mesh *mesh, class Material *material, uint32_t batchDataByteSize = 0, const void *data = nullptr
-    );
+    RenderObject(class Mesh *mesh, class Material *material, uint32_t objectByteSize = 0, const void *data = nullptr);
     template <typename T> RenderObject(class Mesh *mesh, class Material *material, const T &batchData);
 
     RenderObject();

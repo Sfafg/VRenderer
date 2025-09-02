@@ -8,8 +8,7 @@ void GPURenderSystem::Init(int framesInFlight) {
         Shader(ShaderStage::Compute, "resources/shaders/ClearInstructions.comp.spv"),
         PipelineLayout(
             {{DescriptorSetLayoutBinding(0, DescriptorType::StorageBuffer, 1, ShaderStage::Compute),
-              DescriptorSetLayoutBinding(1, DescriptorType::StorageBuffer, 1, ShaderStage::Compute),
-              DescriptorSetLayoutBinding(2, DescriptorType::StorageBuffer, 1, ShaderStage::Compute)}},
+              DescriptorSetLayoutBinding(1, DescriptorType::StorageBuffer, 1, ShaderStage::Compute)}},
             {PushConstantRange(ShaderStage::Compute, 0, sizeof(uint32_t))}
         )
     );
@@ -17,14 +16,13 @@ void GPURenderSystem::Init(int framesInFlight) {
     gpuRenderer = ComputePipeline(
         Shader(ShaderStage::Compute, "resources/shaders/Renderer.comp.spv"),
         PipelineLayout(
-            {{DescriptorSetLayoutBinding(1, DescriptorType::StorageBuffer, 1, ShaderStage::Compute),
-              DescriptorSetLayoutBinding(2, DescriptorType::StorageBuffer, 1, ShaderStage::Compute),
+            {{DescriptorSetLayoutBinding(2, DescriptorType::StorageBuffer, 1, ShaderStage::Compute),
               DescriptorSetLayoutBinding(3, DescriptorType::StorageBuffer, 1, ShaderStage::Compute)}},
             {PushConstantRange(ShaderStage::Compute, 0, sizeof(uint32_t) * 2)}
         )
     );
 
-    descriptorPool = DescriptorPool(framesInFlight * 2, {{DescriptorType::StorageBuffer, 6 * (uint)framesInFlight}});
+    descriptorPool = DescriptorPool(framesInFlight * 2, {{DescriptorType::StorageBuffer, 4 * (uint)framesInFlight}});
 
     std::vector<DescriptorSetLayoutHandle> layouts(
         framesInFlight, clearDrawInstructions.GetPipelineLayout().GetDescriptorSets()[0]
@@ -38,14 +36,12 @@ void GPURenderSystem::Init(int framesInFlight) {
 }
 
 void GPURenderSystem::AttachBuffers(
-    int frameIndex, const vg::Buffer &batchMetaData, const vg::Buffer &meshMetaData, const vg::Buffer &drawInstructions,
+    int frameIndex, const vg::Buffer &meshMetaData, const vg::Buffer &drawInstructions,
     const vg::Buffer &instanceMapping
 ) {
-    clearDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, batchMetaData, 0, -1, 0, 0);
-    clearDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, meshMetaData, 0, -1, 1, 0);
-    clearDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, drawInstructions, 0, -1, 2, 0);
+    clearDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, meshMetaData, 0, -1, 0, 0);
+    clearDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, drawInstructions, 0, -1, 1, 0);
 
-    rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, batchMetaData, 0, -1, 1, 0);
     rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, drawInstructions, 0, -1, 2, 0);
     rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, instanceMapping, 0, -1, 3, 0);
 }
@@ -57,9 +53,9 @@ void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, int frameIndex) {
             clearDrawInstructions.GetPipelineLayout(), PipelineBindPoint::Compute, 0, {clearDescriptors[frameIndex]}
         ),
         cmd::PushConstants(
-            clearDrawInstructions.GetPipelineLayout(), ShaderStage::Compute, 0, (uint32_t)RenderObject::batches.size()
+            clearDrawInstructions.GetPipelineLayout(), ShaderStage::Compute, 0, (uint32_t)Batch::batches.size()
         ),
-        cmd::Dispatch(std::ceil(RenderObject::batches.size() / 16.0), 1, 1),
+        cmd::Dispatch(std::ceil(Batch::batches.size() / 16.0), 1, 1),
         cmd::PipelineBarier(
             PipelineStage::ComputeShader, PipelineStage::ComputeShader, Dependency::ByRegion,
             {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
@@ -70,9 +66,9 @@ void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, int frameIndex) {
         ),
         cmd::PushConstants(
             gpuRenderer.GetPipelineLayout(), ShaderStage::Compute, sizeof(int),
-            (uint32_t)(RenderObject::instanceMapping.GetSize() / sizeof(int))
+            (uint32_t)(Batch::instanceMappingBuffer.GetSize() / sizeof(int))
         ),
-        cmd::Dispatch(std::ceil(RenderObject::instanceMapping.GetSize() / sizeof(int) / 1024.0), 1, 1)
+        cmd::Dispatch(std::ceil(Batch::instanceMappingBuffer.GetSize() / sizeof(int) / 1024.0), 1, 1)
     );
 }
 

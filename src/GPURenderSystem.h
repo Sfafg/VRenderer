@@ -12,8 +12,8 @@ class GPURenderSystem {
     static void Init(int framesInFlight);
 
     static void AttachBuffers(
-        int frameIndex, const vg::Buffer &batchMetaData, const vg::Buffer &meshMetaData,
-        const vg::Buffer &drawInstructions, const vg::Buffer &instanceMapping
+        int frameIndex, const vg::Buffer &meshMetaData, const vg::Buffer &drawInstructions,
+        const vg::Buffer &instanceMapping
     );
 
     static void RecordCommands(vg::CmdBuffer &cmdBuffer, int frameIndex);
