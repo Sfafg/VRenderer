@@ -64,11 +64,8 @@ void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, int frameIndex) {
         cmd::BindDescriptorSets(
             gpuRenderer.GetPipelineLayout(), PipelineBindPoint::Compute, 0, {rendererDescriptors[frameIndex]}
         ),
-        cmd::PushConstants(
-            gpuRenderer.GetPipelineLayout(), ShaderStage::Compute, sizeof(int),
-            (uint32_t)(Batch::instanceMappingBuffer.GetSize() / sizeof(int))
-        ),
-        cmd::Dispatch(std::ceil(Batch::instanceMappingBuffer.GetSize() / sizeof(int) / 1024.0), 1, 1)
+        cmd::PushConstants(gpuRenderer.GetPipelineLayout(), ShaderStage::Compute, sizeof(int), Batch::totalObjects),
+        cmd::Dispatch(std::ceil(Batch::totalObjects / 1024.0), 1, 1)
     );
 }
 

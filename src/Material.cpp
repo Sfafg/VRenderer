@@ -18,7 +18,7 @@ Material::Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, con
 
 Material::Material(Material *material, const void *materialData, int byteSize)
     : index(material->index), variant(materialBuffer.sizes[material->index] / byteSize) {
-    assert(byteSize == materialBuffer.sizes[material->index]);
+    assert(byteSize == materialBuffer.Alignment(material->index));
     materialBuffer.Reallocate(material->index, materialBuffer.sizes[material->index] + byteSize);
     materialBuffer.Write(index, materialData, byteSize, variant * byteSize);
     materials.push_back(this);

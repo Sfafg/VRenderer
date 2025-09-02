@@ -16,6 +16,7 @@ struct DrawCall
     uint materialIndex ;
     uint meshIndex ;
     uint batchDataElementSize;
+    uint lodCountPointerParent;
 };
 
 layout(push_constant) uniform PushConstants{

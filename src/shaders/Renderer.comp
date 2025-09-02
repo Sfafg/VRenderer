@@ -1,5 +1,10 @@
 #version 450
 
+struct InstanceMapping {
+    uint objectDataIndex;
+    uint batchIndex;
+};
+
 struct DrawCall 
 {
     uint indexCount;
@@ -10,7 +15,9 @@ struct DrawCall
     uint materialIndex ;
     uint meshIndex ;
     uint batchDataElementSize;
+    uint lodCountPointerParent;
 };
+const uint NULL_LOD = 0x0FFFFFFF;
 
 layout(push_constant) uniform PushConstants{
     uint drawCount;
@@ -23,13 +30,12 @@ layout(push_constant) uniform PushConstants{
 //     mat4 viewProjection;
 // };
 
-// MeshMetaDAt
 layout(std430, binding = 2) buffer DrawCalls{
     DrawCall drawCalls[];
 };
 
-layout(std430, binding = 3) buffer InstanceMapping{
-    uint instanceMapping[];
+layout(std430, binding = 3) buffer InstanceMappings{
+    InstanceMapping instanceMapping[];
 };
 
 // layout(std430, binding = 4) buffer BatchData{ float batchData[]; };
@@ -40,13 +46,28 @@ void main()
     uint sourceObjectIndex = gl_GlobalInvocationID.x;
     if(sourceObjectIndex >= objectCount) return;
 
-    uint drawID = 0;
+    uint drawIndex=0;
     for(uint i = drawCount-1; i != -1U; i--)
-        if(sourceObjectIndex >= drawCalls[i].firstInstance){
-            drawID = i;
+    {
+        if(drawCalls[i].lodCountPointerParent == NULL_LOD && sourceObjectIndex >= drawCalls[i].firstInstance){
+            drawIndex = i;
             break;
         }
+    }
 
-    uint targetObjectIndex = atomicAdd(drawCalls[drawID].instanceCount,1) + drawCalls[drawID].firstInstance;
-    instanceMapping[targetObjectIndex] = sourceObjectIndex;
+    uint parent = drawIndex;
+    uint lodCount = drawCalls[drawIndex].lodCountPointerParent>>28&0xF;
+
+    if(lodCount!=0)
+    {
+        uint lodPointer = (drawCalls[drawIndex].lodCountPointerParent>>14)&0x03FFF;
+
+        if(sourceObjectIndex%3==0) 
+            drawIndex = lodPointer;
+        else if(sourceObjectIndex%5==0)drawIndex=(drawCalls[lodPointer].lodCountPointerParent>>14)&0x03FFF; 
+    }
+
+    uint targetObjectIndex = atomicAdd(drawCalls[drawIndex].instanceCount,1) + drawCalls[drawIndex].firstInstance;
+    instanceMapping[targetObjectIndex].objectDataIndex = sourceObjectIndex;
+    instanceMapping[targetObjectIndex].batchIndex = drawIndex;
 }

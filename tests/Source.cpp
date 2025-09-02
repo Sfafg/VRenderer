@@ -70,17 +70,21 @@ int main() {
     Material mat1(
         "resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv",
         vg::VertexLayout(
-            {vg::VertexBinding(0, sizeof(float) * 2), vg::VertexBinding(1, sizeof(uint), vg::InputRate::Instance)},
-            {vg::VertexAttribute(0, 0, vg::Format::RG32SFLOAT), vg::VertexAttribute(1, 1, vg::Format::R32UINT)}
+            {vg::VertexBinding(0, sizeof(float) * 2),
+             vg::VertexBinding(1, sizeof(Batch::InstanceMapping), vg::InputRate::Instance)},
+            {vg::VertexAttribute(0, 0, vg::Format::RG32SFLOAT), vg::VertexAttribute(1, 1, vg::Format::R32UINT),
+             vg::VertexAttribute(2, 1, vg::Format::R32UINT, offsetof(Batch::InstanceMapping, batchIndex))}
         ),
         {.cullMode = vg::CullMode::None},
         vg::SubpassDependency(
             -1, 0, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
             vg::Access::ColorAttachmentWrite, {}
         ),
-        0.2f
+        glm::vec4(0.2f, 0.2f, 0.9f, 1.0f)
     );
-    Material mat2(&mat1, 0.6f);
+    Material mat2(&mat1, glm::vec4(0.6f, 0.6f, 0.6f, 1.0f));
+    Material mat3(&mat1, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+    Material mat4(&mat1, glm::vec4(1.0f, 0.0f, 1.0f, 1.0f));
     // Material mat3(
     //     "resources/shaders/shader1.vert.spv", "resources/shaders/shader1.frag.spv",
     //     vg::VertexLayout(
@@ -104,6 +108,11 @@ int main() {
     //     4, sizeof(float) * 5, new float[]{-1, -1, 1, 1, 1, 0, -1, 1, 1, 0, 0, 0, 0, 1, 1, -1, 0, 1, 0, 1}, 6,
     //     sizeof(int), new int[]{0, 1, 2, 2, 3, 0}
     // );
+
+    auto [batchID, batchExists] = Batch::Add(&mat1, &testMesh, sizeof(glm::mat4));
+    Batch::Add(&mat2, &testMesh2, sizeof(glm::mat4));
+    Batch::AddLOD(batchID, &mat3, &testMesh);
+    Batch::AddLOD(batchID, &mat4, &testMesh2);
 
     RenderObject renderObjects[1000];
     RenderObject renderObjects2[1000];
