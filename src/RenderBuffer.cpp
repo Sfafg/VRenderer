@@ -35,19 +35,32 @@ bool RenderBuffer::FlushBuffer(int index) {
 vg::Buffer &RenderBuffer::GetBuffer(int index) { return renderingBuffer[index]; }
 const vg::Buffer &RenderBuffer::GetBuffer(int index) const { return renderingBuffer[index]; }
 
-uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment) {
+uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment, uint32_t targetRegionID) {
     bufferChangeFlag.Set(BufferChange::Contents);
-    int currentSize = this->size;
-    int padding = alignment != 0 ? (alignment - currentSize % alignment) % alignment : 0;
+    if (targetRegionID >= sizes.size()) {
+        int offset = this->size;
+        int padding = alignment != 0 ? (alignment - offset % alignment) % alignment : 0;
 
-    size += padding + byteSize;
-    if (size >= stagingBuffer.GetSize()) Reserve(size);
+        size += padding + byteSize;
+        if (size >= stagingBuffer.GetSize()) Reserve(size);
 
-    sizes.push_back(byteSize);
-    alignments.push_back(alignment);
-    offsets.push_back(currentSize + padding);
+        sizes.push_back(byteSize);
+        alignments.push_back(alignment);
+        offsets.push_back(offset + padding);
 
-    return sizes.size() - 1;
+        return sizes.size() - 1;
+    } else {
+        int offset = offsets[targetRegionID];
+        if (targetRegionID > 0) offset = offsets[targetRegionID - 1] + sizes[targetRegionID - 1];
+        int padding = alignment != 0 ? (alignment - offset % alignment) % alignment : 0;
+
+        sizes.insert(sizes.begin() + targetRegionID, 0);
+        alignments.insert(alignments.begin() + targetRegionID, alignment);
+        offsets.insert(offsets.begin() + targetRegionID, offset + padding);
+        Reallocate(targetRegionID, byteSize);
+
+        return targetRegionID;
+    }
 }
 
 void RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {

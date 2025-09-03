@@ -20,7 +20,14 @@ std::tuple<uint, bool> Batch::Add(Material *material, Mesh *mesh, uint objectByt
     auto [index, exists] = Get(material, mesh);
 
     if (!exists) {
-        assert(index == batches.size() && "TODO: This should insert a new region, not append it");
+        for (int i = 0; i < batches.size(); i++) {
+            auto &batch = batches[i];
+            if (batch.ParentPointer() != 0b11111111111111 && batch.ParentPointer() >= index)
+                batch.SetParentPointer(batch.ParentPointer() + 1);
+            if (batch.LodPointer() != 0b11111111111111 && batch.LodPointer() >= index)
+                batch.SetLodPointer(batch.LodPointer() + 1);
+            drawCallBuffer.Write(i, batch.lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
+        }
 
         Batch batch;
         batch.firstInstance = 0;
@@ -38,9 +45,9 @@ std::tuple<uint, bool> Batch::Add(Material *material, Mesh *mesh, uint objectByt
         for (int i = index + 1; i < renderObjects.size(); i++)
             for (auto &&ro : renderObjects[i]) ro->batchIndex++;
 
-        drawCallBuffer.Allocate(sizeof(Batch), sizeof(Batch));
-        objectBuffer.Allocate(0, objectByteSize);
-        instanceMappingBuffer.Allocate(0, sizeof(InstanceMapping));
+        drawCallBuffer.Allocate(sizeof(Batch), sizeof(Batch), index);
+        objectBuffer.Allocate(0, objectByteSize, index);
+        instanceMappingBuffer.Allocate(0, sizeof(InstanceMapping), index);
 
         drawCallBuffer.Write(index, batch);
     }

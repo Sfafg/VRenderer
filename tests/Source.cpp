@@ -110,7 +110,6 @@ int main() {
     // );
 
     auto [batchID, batchExists] = Batch::Add(&mat1, &testMesh, sizeof(glm::mat4));
-    Batch::Add(&mat2, &testMesh2, sizeof(glm::mat4));
     Batch::AddLOD(batchID, &mat3, &testMesh);
     Batch::AddLOD(batchID, &mat4, &testMesh2);
 

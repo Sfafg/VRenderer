@@ -42,7 +42,7 @@ class RenderBuffer {
     RenderBuffer &operator=(const RenderBuffer &) = delete;
     ~RenderBuffer();
 
-    uint32_t Allocate(uint32_t byteSize, uint32_t alignment);
+    uint32_t Allocate(uint32_t byteSize, uint32_t alignment, uint32_t targetRegionID = -1U);
     void Reallocate(uint32_t regionID, uint32_t newByteSize);
     void Deallocate(uint32_t regionID);
     void Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOffset = 0);
