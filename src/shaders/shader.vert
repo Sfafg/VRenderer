@@ -12,7 +12,6 @@ struct DrawCall
     uint batchDataElementSize;
     uint lodCountPointerParent;
 };
-const uint NULL_LOD = 0x3FFF;
 
 layout(set = 0, binding = 0) uniform PassData{
     mat4 viewProjection;

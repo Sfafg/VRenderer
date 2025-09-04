@@ -14,6 +14,8 @@ class Batch {
     void SetLodCount(uint count);
     void SetLodPointer(uint pointer);
     void SetParentPointer(uint pointer);
+    Batch *GetNextLod() const;
+    Batch *GetLodParent() const;
     static const uint NULL_LOD = 0b1111111111111111111111111111;
 
   public:
@@ -25,10 +27,10 @@ class Batch {
 
     static std::vector<Batch> batches;
     static std::vector<std::tuple<uint16_t, uint16_t>> materialIndices;
-    static RenderBuffer drawCallBuffer;
-    static RenderBuffer instanceMappingBuffer;
-
+    static std::vector<uint> instanceMappingRegionIndex;
     static std::vector<std::vector<RenderObject *>> renderObjects;
+    static RenderBuffer instanceMappingBuffer;
+    static RenderBuffer drawCallBuffer;
     static RenderBuffer objectBuffer;
 
     uint indexCount;
@@ -40,13 +42,8 @@ class Batch {
     uint meshIndex = -1U;
     uint batchDataElementSize;
     uint lodCountPointerParent;
-    // struct {
-    //     uint lodCount : 4 = 0;
-    //     uint lodPointer : 14 = NULL_LOD;
-    //     uint parentPointer : 14 = NULL_LOD;
-    // };
 
-    static std::tuple<uint, bool> Add(Material *material, Mesh *mesh, uint objectByteSize);
+    static std::tuple<uint, bool> Add(Material *material, Mesh *mesh, uint objectByteSize, bool isLod = false);
     static std::tuple<uint, bool> Get(Material *material, Mesh *mesh);
     static void Remove(uint index);
     static void ReserveObjects(uint batchIndex, uint objectCount);
@@ -63,6 +60,9 @@ class Batch {
     static void NotifyMaterialDestroy(uint index);
     static void NotifyVariantDestroy(uint materialIndex, uint index);
     static void NotifyMeshDestroy(uint index);
+
+    static void FixAfterObjectChange(uint batchID, uint firstObject, int objectDelta);
+    static void FixAfterBatchChange(uint firstBatch, int batchDelta);
 
     static void AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize);
     static void RemoveObject(RenderObject *renderObject);

@@ -75,6 +75,8 @@ void Renderer::SetPassData(const PassData &data) {
 }
 
 void Renderer::RenderFrame() {
+    if (Batch::batches.size() == 0) return;
+
     inFlightFence[frameIndex].Await(true);
 
     auto [imageIndex, result] = swapchain.GetNextImageIndex(imageAvailableSemaphore[frameIndex]);
@@ -110,36 +112,54 @@ void Renderer::RenderFrame() {
     );
     GPURenderSystem::RecordCommands(commandBuffer[frameIndex], imageIndex);
 
-    commandBuffer[frameIndex]
-        .Append(
-            cmd::PipelineBarier(
-                PipelineStage::ComputeShader, PipelineStage::VertexShader, Dependency::ByRegion,
-                {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
-            ),
-            cmd::BeginRenderpass(
-                renderPass, framebuffers[imageIndex], {0, 0}, {swapchain.GetWidth(), swapchain.GetHeight()},
-                {ClearColor{0, 0, 0, 255}, ClearDepthStencil{1.0f, 0U}}, SubpassContents::Inline
-            ),
-            cmd::BindPipeline(renderPass.GetPipelines()[0]),
-            cmd::BindVertexBuffers(
-                {
-                    (vg::BufferHandle)Mesh::vertexBuffer.GetBuffer(imageIndex),
-                    (vg::BufferHandle)Batch::instanceMappingBuffer.GetBuffer(imageIndex),
-                },
-                {0, 0}
-            ),
-            cmd::BindIndexBuffer(Mesh::indexBuffer.GetBuffer(imageIndex), 0, IndexType::Uint32),
-            cmd::SetViewport(Viewport(swapchain.GetWidth(), swapchain.GetHeight())),
-            cmd::SetScissor(Scissor(swapchain.GetWidth(), swapchain.GetHeight())),
-            cmd::BindDescriptorSets(
-                renderPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[imageIndex]}
-            ),
-            cmd::DrawIndexedIndirect(
-                Batch::drawCallBuffer.GetBuffer(imageIndex), 0, Batch::drawCallBuffer.GetSize() / sizeof(Batch),
-                sizeof(Batch)
-            ),
-            cmd::EndRenderpass()
+    commandBuffer[frameIndex].Append(
+        cmd::PipelineBarier(
+            PipelineStage::ComputeShader, PipelineStage::VertexShader, Dependency::ByRegion,
+            {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
+        ),
+        cmd::BeginRenderpass(
+            renderPass, framebuffers[imageIndex], {0, 0}, {swapchain.GetWidth(), swapchain.GetHeight()},
+            {ClearColor{0, 0, 0, 255}, ClearDepthStencil{1.0f, 0U}}, SubpassContents::Inline
+        ),
+        cmd::BindVertexBuffers(
+            {
+                (vg::BufferHandle)Mesh::vertexBuffer.GetBuffer(imageIndex),
+                (vg::BufferHandle)Batch::instanceMappingBuffer.GetBuffer(imageIndex),
+            },
+            {0, 0}
+        ),
+        cmd::BindIndexBuffer(Mesh::indexBuffer.GetBuffer(imageIndex), 0, IndexType::Uint32),
+        cmd::SetViewport(Viewport(swapchain.GetWidth(), swapchain.GetHeight())),
+        cmd::SetScissor(Scissor(swapchain.GetWidth(), swapchain.GetHeight())),
+        cmd::BindDescriptorSets(
+            renderPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[imageIndex]}
         )
+    );
+    int batchMaterialOffset = 0;
+    for (int i = 0; i < Material::subpasses.size(); i++) {
+        if (i != 0) commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
+
+        if (batchMaterialOffset >= Batch::batches.size() ||
+            std::get<0>(Batch::materialIndices[batchMaterialOffset]) != i)
+            continue;
+
+        int batchMaterialCount = 1;
+        for (int j = batchMaterialOffset + 1; j < Batch::batches.size(); j++) {
+            if (std::get<0>(Batch::materialIndices[j]) == i) batchMaterialCount++;
+            else break;
+        }
+        commandBuffer[frameIndex].Append(
+            cmd::BindPipeline(renderPass.GetPipelines()[i]),
+            cmd::DrawIndexedIndirect(
+                Batch::drawCallBuffer.GetBuffer(imageIndex), sizeof(Batch) * batchMaterialOffset, batchMaterialCount,
+                sizeof(Batch)
+            )
+        );
+        batchMaterialOffset += batchMaterialCount;
+    }
+
+    commandBuffer[frameIndex]
+        .Append(cmd::EndRenderpass())
         .End()
         .Submit(
             {{PipelineStage::ColorAttachmentOutput, imageAvailableSemaphore[frameIndex]}},
