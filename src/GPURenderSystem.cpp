@@ -7,22 +7,27 @@ void GPURenderSystem::Init(int framesInFlight) {
     clearDrawInstructions = ComputePipeline(
         Shader(ShaderStage::Compute, "resources/shaders/ClearInstructions.comp.spv"),
         PipelineLayout(
-            {{DescriptorSetLayoutBinding(0, DescriptorType::StorageBuffer, 1, ShaderStage::Compute),
-              DescriptorSetLayoutBinding(1, DescriptorType::StorageBuffer, 1, ShaderStage::Compute)}},
-            {PushConstantRange(ShaderStage::Compute, 0, sizeof(uint32_t))}
+            {{{0, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
+              {1, DescriptorType::StorageBuffer, 1, ShaderStage::Compute}}},
+            {{ShaderStage::Compute, 0, sizeof(uint32_t)}}
         )
     );
 
     gpuRenderer = ComputePipeline(
         Shader(ShaderStage::Compute, "resources/shaders/Renderer.comp.spv"),
         PipelineLayout(
-            {{DescriptorSetLayoutBinding(2, DescriptorType::StorageBuffer, 1, ShaderStage::Compute),
-              DescriptorSetLayoutBinding(3, DescriptorType::StorageBuffer, 1, ShaderStage::Compute)}},
-            {PushConstantRange(ShaderStage::Compute, 0, sizeof(uint32_t) * 2)}
+            {{{0, DescriptorType::UniformBuffer, 1, ShaderStage::Compute},
+              {2, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
+              {3, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
+              {4, DescriptorType::StorageBuffer, 1, ShaderStage::Compute}}},
+            {{ShaderStage::Compute, 0, sizeof(uint32_t) * 2}}
         )
     );
 
-    descriptorPool = DescriptorPool(framesInFlight * 2, {{DescriptorType::StorageBuffer, 4 * (uint)framesInFlight}});
+    descriptorPool = DescriptorPool(
+        framesInFlight * 2, {{DescriptorType::UniformBuffer, (uint)framesInFlight},
+                             {DescriptorType::StorageBuffer, 5 * (uint)framesInFlight}}
+    );
 
     std::vector<DescriptorSetLayoutHandle> layouts(
         framesInFlight, clearDrawInstructions.GetPipelineLayout().GetDescriptorSets()[0]
@@ -36,14 +41,16 @@ void GPURenderSystem::Init(int framesInFlight) {
 }
 
 void GPURenderSystem::AttachBuffers(
-    int frameIndex, const vg::Buffer &meshMetaData, const vg::Buffer &drawInstructions,
-    const vg::Buffer &instanceMapping
+    int frameIndex, const vg::Buffer &passBuffer, const vg::Buffer &meshMetaData, const vg::Buffer &objectData,
+    const vg::Buffer &drawInstructions, const vg::Buffer &instanceMapping
 ) {
     clearDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, meshMetaData, 0, -1, 0, 0);
     clearDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, drawInstructions, 0, -1, 1, 0);
 
+    rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::UniformBuffer, passBuffer, 0, -1, 0, 0);
     rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, drawInstructions, 0, -1, 2, 0);
     rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, instanceMapping, 0, -1, 3, 0);
+    rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, objectData, 0, -1, 4, 0);
 }
 
 void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, int frameIndex) {

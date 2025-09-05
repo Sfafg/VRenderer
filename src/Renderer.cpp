@@ -10,7 +10,8 @@ void Renderer::RecreateRenderpass() {
     if (Material::subpasses.size() == 0 || swapchain.GetImageCount() == 0) return;
 
     renderPass = RenderPass(
-        {Attachment(surface.GetFormat(), ImageLayout::PresentSrc)},
+        {Attachment(surface.GetFormat(), ImageLayout::PresentSrc),
+         Attachment(depthImage.GetFormat(), ImageLayout::DepthStencilAttachmentOptimal)},
         Vector<PipelineLayout>(PipelineLayout(
             {{vg::DescriptorSetLayoutBinding(0, vg::DescriptorType::UniformBuffer, 1, vg::ShaderStage::Vertex),
               vg::DescriptorSetLayoutBinding(1, vg::DescriptorType::StorageBuffer, 1, vg::ShaderStage::Vertex),
@@ -37,13 +38,21 @@ void Renderer::RecreateRenderpass() {
 
     framebuffers.resize(swapchain.GetImageCount());
     for (int i = 0; i < swapchain.GetImageCount(); i++)
-        framebuffers[i] =
-            Framebuffer(renderPass, {swapchain.GetImageViews()[i]}, swapchain.GetWidth(), swapchain.GetHeight());
+        framebuffers[i] = Framebuffer(
+            renderPass, {swapchain.GetImageViews()[i], depthImageView}, swapchain.GetWidth(), swapchain.GetHeight()
+        );
 }
 void Renderer::Init(void *window, const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height) {
     Renderer::window = window;
     surface = Surface(windowSurface, {Format::BGRA8SRGB, ColorSpace::SRGBNL});
     swapchain = Swapchain(surface, 2, width, height);
+    depthImage = Image(
+        {swapchain.GetWidth(), swapchain.GetHeight()},
+        {Format::D32SFLOAT, Format::D32SFLOATS8UINT, Format::x8D24UNORMPACK}, {FormatFeature::DepthStencilAttachment},
+        {ImageUsage::DepthStencilAttachment}, 1, 1
+    );
+    Allocate(depthImage, {MemoryProperty::DeviceLocal});
+    depthImageView = ImageView(depthImage, {ImageAspect::Depth});
 
     descriptorPool = DescriptorPool(
         swapchain.GetImageCount(), {{DescriptorType::UniformBuffer, swapchain.GetImageCount()},
@@ -107,8 +116,8 @@ void Renderer::RenderFrame() {
     commandBuffer[frameIndex].Clear().Begin();
 
     GPURenderSystem::AttachBuffers(
-        imageIndex, Mesh::meshDataBuffer.GetBuffer(imageIndex), Batch::drawCallBuffer.GetBuffer(imageIndex),
-        Batch::instanceMappingBuffer.GetBuffer(imageIndex)
+        imageIndex, passBuffer, Mesh::meshDataBuffer.GetBuffer(imageIndex), Batch::objectBuffer.GetBuffer(imageIndex),
+        Batch::drawCallBuffer.GetBuffer(imageIndex), Batch::instanceMappingBuffer.GetBuffer(imageIndex)
     );
     GPURenderSystem::RecordCommands(commandBuffer[frameIndex], imageIndex);
 
@@ -188,6 +197,8 @@ bool Renderer::IsInitialized() { return window != nullptr; }
 void *Renderer::window = nullptr;
 vg::Surface Renderer::surface;
 vg::Swapchain Renderer::swapchain;
+vg::Image Renderer::depthImage;
+vg::ImageView Renderer::depthImageView;
 
 vg::DescriptorPool Renderer::descriptorPool;
 std::vector<vg::DescriptorSet> Renderer::descriptorSets;

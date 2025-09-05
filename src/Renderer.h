@@ -13,6 +13,8 @@ class Renderer {
     static void *window;
     static vg::Surface surface;
     static vg::Swapchain swapchain;
+    static vg::Image depthImage;
+    static vg::ImageView depthImageView;
 
     static std::vector<vg::Framebuffer> framebuffers;
     static vg::DescriptorPool descriptorPool;
@@ -34,7 +36,10 @@ class Renderer {
 
   public:
     struct PassData {
+        glm::mat4 view;
+        glm::mat4 projection;
         glm::mat4 viewProjection;
+        glm::vec3 cameraPosition;
     };
 
   public:

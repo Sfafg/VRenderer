@@ -69,7 +69,7 @@ Material::Material(
                   vertexInput, inputAssembly, vg::Tesselation(), viewportState, rasterizer, vg::Multisampling(),
                   depthStencil, colorBlending, dynamicState, childrenCount
               ),
-              {}, colorAttachments, {}, {}, {}
+              {}, colorAttachments, {}, vg::AttachmentReference(1, vg::ImageLayout::DepthStencilAttachmentOptimal), {}
           ),
           std::move(dependecy), materialData, dataSize
       ) {}

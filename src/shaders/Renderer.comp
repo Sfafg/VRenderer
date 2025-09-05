@@ -5,70 +5,75 @@ struct InstanceMapping {
     uint batchIndex;
 };
 
-struct DrawCall 
-{
+struct DrawCall {
     uint indexCount;
     uint instanceCount;
     uint firstIndex;
     uint vertexOffset;
     uint firstInstance;
-    uint materialIndex ;
-    uint meshIndex ;
+    uint materialIndex;
+    uint meshIndex;
     uint batchDataElementSize;
     uint lodCountPointerParent;
     uint firstObject;
 };
 const uint NULL_LOD = 0x0FFFFFFF;
 
-layout(push_constant) uniform PushConstants{
+layout(push_constant) uniform PushConstants {
     uint drawCount;
     uint objectCount;
 };
 
-// layout(std140, binding = 0) uniform CameraMatrices{
-//     mat4 projection;
-//     mat4 view;
-//     mat4 viewProjection;
-// };
-
-layout(std430, binding = 2) buffer DrawCalls{
-    DrawCall drawCalls[];
+layout(std140, binding = 0) uniform PassData {
+    mat4 view;
+    mat4 projection;
+    mat4 viewProjection;
+    vec3 cameraPosition;
 };
 
-layout(std430, binding = 3) buffer InstanceMappings{
-    InstanceMapping instanceMapping[];
-};
+layout(std430, binding = 2) buffer DrawCalls { DrawCall drawCalls[]; };
 
-// layout(std430, binding = 4) buffer BatchData{ float batchData[]; };
+layout(std430, binding = 3) buffer InstanceMappings { InstanceMapping instanceMapping[]; };
 
-layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
-void main() 
-{
+layout(std430, binding = 4) buffer BatchDatas { float batchData[]; };
+
+uint GetLodCount(uint drawCall) { return drawCalls[drawCall].lodCountPointerParent >> 28 & 0xF; }
+
+uint GetLodIndex(uint drawCall) {
+    uint id = drawCalls[drawCall].lodCountPointerParent >> 14 & 0x3FFF;
+    if (id == 0x3FFF) return -1U;
+    return id;
+}
+uint GetParentIndex(uint drawCall) {
+    uint id = drawCalls[drawCall].lodCountPointerParent & 0x3FFF;
+    if (id == 0x3FFF) return -1U;
+    return id;
+}
+
+uint GetDrawCallIndex(uint sourceObjectIndex) {
+    for (uint i = drawCount - 1; i != -1U; i--)
+        if (GetParentIndex(i) == -1U && sourceObjectIndex >= drawCalls[i].firstInstance) return i;
+}
+
+layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+void main() {
     uint sourceObjectIndex = gl_GlobalInvocationID.x;
-    if(sourceObjectIndex >= objectCount) return;
+    if (sourceObjectIndex >= objectCount) return;
 
-    uint drawIndex=0;
-    for(uint i = drawCount-1; i != -1U; i--)
-    {
-        if(drawCalls[i].lodCountPointerParent == NULL_LOD && sourceObjectIndex >= drawCalls[i].firstInstance){
-            drawIndex = i;
-            break;
-        }
+    uint baseDrawCall = GetDrawCallIndex(sourceObjectIndex);
+    uint objectID = sourceObjectIndex - drawCalls[baseDrawCall].firstInstance;
+    uint drawCall = baseDrawCall;
+    uint lodCount = GetLodCount(baseDrawCall);
+    if (lodCount != 0) {
+        uint dataIndex =
+            (drawCalls[baseDrawCall].firstObject + objectID) * drawCalls[baseDrawCall].batchDataElementSize / 4;
+        vec3 objectPosition = vec3(batchData[dataIndex + 12], batchData[dataIndex + 13], batchData[dataIndex + 14]);
+        float d = distance(objectPosition, cameraPosition) / 100;
+        uint lodIndex = min(lodCount, uint(d * lodCount));
+        for (int i = 0; i < lodIndex; i++) drawCall = GetLodIndex(drawCall);
     }
 
-    uint parent = drawIndex;
-    uint lodCount = drawCalls[drawIndex].lodCountPointerParent>>28&0xF;
-
-    if(lodCount!=0)
-    {
-        uint lodPointer = (drawCalls[drawIndex].lodCountPointerParent>>14)&0x03FFF;
-
-        if(sourceObjectIndex%3==0) 
-            drawIndex = lodPointer;
-        else if(sourceObjectIndex%5==0)drawIndex=(drawCalls[lodPointer].lodCountPointerParent>>14)&0x03FFF; 
-    }
-
-    uint targetObjectIndex = atomicAdd(drawCalls[drawIndex].instanceCount,1) + drawCalls[drawIndex].firstInstance;
-    instanceMapping[targetObjectIndex].objectDataIndex = sourceObjectIndex-drawCalls[parent].firstInstance;
-    instanceMapping[targetObjectIndex].batchIndex = drawIndex;
+    uint targetObjectIndex = atomicAdd(drawCalls[drawCall].instanceCount, 1) + drawCalls[drawCall].firstInstance;
+    instanceMapping[targetObjectIndex].objectDataIndex = objectID;
+    instanceMapping[targetObjectIndex].batchIndex = drawCall;
 }
