@@ -11,6 +11,7 @@ struct DrawCall
     uint meshIndex ;
     uint batchDataElementSize;
     uint lodCountPointerParent;
+    uint firstObject;
 };
 
 layout(set = 0, binding = 0) uniform PassData{
@@ -34,6 +35,6 @@ layout(location = 0) out vec4 col;
 void main() {
     DrawCall drawCall = drawCalls[batchIndex];
 
-    gl_Position = viewProjection*objectData[objectIndex]*vec4(aPosition.x, aPosition.y,0 ,1);
+    gl_Position = viewProjection*objectData[objectIndex + drawCall.firstObject]*vec4(aPosition.x, aPosition.y,0 ,1);
     col = vec4(color[drawCall.materialIndex]);
 }

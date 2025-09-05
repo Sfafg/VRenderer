@@ -16,6 +16,7 @@ struct DrawCall
     uint meshIndex ;
     uint batchDataElementSize;
     uint lodCountPointerParent;
+    uint firstObject;
 };
 const uint NULL_LOD = 0x0FFFFFFF;
 
@@ -68,6 +69,6 @@ void main()
     }
 
     uint targetObjectIndex = atomicAdd(drawCalls[drawIndex].instanceCount,1) + drawCalls[drawIndex].firstInstance;
-    instanceMapping[targetObjectIndex].objectDataIndex = sourceObjectIndex;
+    instanceMapping[targetObjectIndex].objectDataIndex = sourceObjectIndex-drawCalls[parent].firstInstance;
     instanceMapping[targetObjectIndex].batchIndex = drawIndex;
 }

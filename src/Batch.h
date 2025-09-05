@@ -42,6 +42,7 @@ class Batch {
     uint meshIndex = -1U;
     uint batchDataElementSize;
     uint lodCountPointerParent;
+    uint firstObject;
 
     static std::tuple<uint, bool> Add(Material *material, Mesh *mesh, uint objectByteSize, bool isLod = false);
     static std::tuple<uint, bool> Get(Material *material, Mesh *mesh);

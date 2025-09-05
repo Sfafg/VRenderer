@@ -131,8 +131,8 @@ int main() {
         renderObjects[i] = RenderObject(&testMesh, &mat1, matrix);
         renderObjects2[i] = RenderObject(&testMesh1, &mat2, matrix);
     }
-    RenderObject renderObject1(&testMesh1_1, &mat1_1);
-    RenderObject renderObject2(&testMesh1_1, &mat1_2);
+    RenderObject renderObject1(&testMesh1_1, &mat1_1, 0.3f);
+    RenderObject renderObject2(&testMesh1_1, &mat1_2, 1.0f);
 
     glm::dvec2 lastMouseP;
     glfwGetCursorPos(window, &lastMouseP.x, &lastMouseP.y);

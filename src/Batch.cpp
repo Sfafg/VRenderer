@@ -58,6 +58,7 @@ std::tuple<uint, bool> Batch::Add(Material *material, Mesh *mesh, uint objectByt
 
         batch.firstInstance = instanceMappingBuffer.Offset(instanceMappingRegion) /
                               instanceMappingBuffer.Alignment(instanceMappingRegion);
+        if (!isLod) batch.firstObject = objectBuffer.Offset(index) / objectBuffer.Alignment(index);
         drawCallBuffer.Write(index, batch);
 
         FixAfterBatchChange(index, 1);
@@ -115,9 +116,12 @@ void Batch::AddLOD(uint batchIndex, Material *material, Mesh *mesh) {
     batches[tailIndex].SetLodPointer(index);
     batches[batchIndex].SetLodCount(batches[batchIndex].LodCount() + 1);
     batches[index].SetParentPointer(batchIndex);
+    batches[index].firstObject = objectBuffer.Offset(batchIndex) / objectBuffer.Alignment(batchIndex);
+
     drawCallBuffer.Write(tailIndex, batches[tailIndex].lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
     drawCallBuffer.Write(batchIndex, batches[batchIndex].lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
     drawCallBuffer.Write(index, batches[index].lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
+    drawCallBuffer.Write(index, batches[index].firstObject, offsetof(Batch, firstObject));
     instanceMappingBuffer.Reallocate(index, instanceMappingBuffer.Size(instanceMappingRegionIndex[batchIndex]));
     FixAfterObjectChange(index, 0, renderObjects[batchIndex].size());
 }
@@ -246,10 +250,15 @@ void Batch::FixAfterObjectChange(uint batchID, uint firstObject, int objectDelta
 
     // First Instance.
     for (int i = 0; i < batches.size(); i++) {
-        // if (i == batchID) continue;
-        batches[i].firstInstance = instanceMappingBuffer.Offset(instanceMappingRegionIndex[i]) /
-                                   instanceMappingBuffer.Alignment(instanceMappingRegionIndex[i]);
-        drawCallBuffer.Write(i, batches[i].firstInstance, offsetof(Batch, firstInstance));
+        auto &batch = batches[i];
+        batch.firstInstance = instanceMappingBuffer.Offset(instanceMappingRegionIndex[i]) /
+                              instanceMappingBuffer.Alignment(instanceMappingRegionIndex[i]);
+        drawCallBuffer.Write(i, batch.firstInstance, offsetof(Batch, firstInstance));
+
+        // First object.
+        if (batch.GetLodParent() == nullptr) batch.firstObject = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
+        else batch.firstObject = batch.GetLodParent()->firstObject;
+        drawCallBuffer.Write(i, batches[i].firstObject, offsetof(Batch, firstObject));
     }
 }
 
@@ -272,6 +281,11 @@ void Batch::FixAfterBatchChange(uint firstBatch, int batchDelta) {
         if (batch.LodPointer() != 0b11111111111111 && batch.LodPointer() > lastBatch)
             batch.SetLodPointer(batch.LodPointer() + batchDelta);
         drawCallBuffer.Write(i, batch.lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
+
+        // First object.
+        if (batch.GetLodParent() == nullptr) batch.firstObject = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
+        else batch.firstObject = batch.GetLodParent()->firstObject;
+        drawCallBuffer.Write(i, batches[i].firstObject, offsetof(Batch, firstObject));
     }
 }
 
