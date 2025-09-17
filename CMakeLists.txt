@@ -59,18 +59,20 @@ if(VRENDERER_BUILD_TESTS)
     endif()
 
     file(GLOB_RECURSE SHADERS "${SHADER_ROOT}/*.vert" "${SHADER_ROOT}/*.frag" "${SHADER_ROOT}/*.comp")
+    file(GLOB_RECURSE SHADER_DEPEND "${SHADER_ROOT}/*.glsl")
+
     foreach(SHADER ${SHADERS})
         string(REPLACE "${SHADER_ROOT}/" "" SHADER_NAME "${SHADER}")
         add_custom_command(
             OUTPUT "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
-            COMMAND "${GLSLC_EXECUTABLE}" "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
-            DEPENDS "${SHADER}"
+            COMMAND "${GLSLC_EXECUTABLE}" -O -Werror "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
+            DEPENDS "${SHADER}" "${SHADER_DEPEND}"
             COMMENT "Compiling Shader: ${SHADER_NAME}.spv"
         )
         list(APPEND SHADER_DEPEND "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")
     endforeach()
 
-    add_custom_target(Shaders ALL DEPENDS ${SHADER_DEPEND})
+    add_custom_target(Shaders ALL DEPENDS "${SHADER_DEPEND}")
 
 # RESOURCES
     file(GLOB_RECURSE RESOURCES "${RESOURCES_ROOT}/*.*")
@@ -99,9 +101,18 @@ if(VRENDERER_BUILD_TESTS)
     )
     FetchContent_MakeAvailable(glfw)
 
+    # FetchContent_Declare(
+    #     tracy
+    #     GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+    #     GIT_TAG master
+    #     GIT_SHALLOW TRUE
+    #     GIT_PROGRESS TRUE
+    # )
+    # FetchContent_MakeAvailable(tracy)
+
 # VRenderer
     add_executable(Renderer ${TESTS_ROOT}/Source.cpp)
-    target_link_libraries(Renderer PRIVATE VRenderer glfw glm)
+    target_link_libraries(Renderer PRIVATE VRenderer glfw glm )#TracyClient
     add_dependencies(Renderer Shaders Resources)
 
 # RendererTest

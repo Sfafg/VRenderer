@@ -5,19 +5,7 @@ struct InstanceMapping {
     uint batchIndex;
 };
 
-struct DrawCall {
-    uint indexCount;
-    uint instanceCount;
-    uint firstIndex;
-    uint vertexOffset;
-    uint firstInstance;
-    uint materialIndex;
-    uint meshIndex;
-    uint batchDataElementSize;
-    uint lodCountPointerParent;
-    uint firstObject;
-};
-const uint NULL_LOD = 0x0FFFFFFF;
+#include "DrawCall.glsl"
 
 layout(push_constant) uniform PushConstants {
     uint drawCount;
@@ -50,9 +38,15 @@ uint GetParentIndex(uint drawCall) {
     return id;
 }
 
-uint GetDrawCallIndex(uint sourceObjectIndex) {
-    for (uint i = drawCount - 1; i != -1U; i--)
-        if (GetParentIndex(i) == -1U && sourceObjectIndex >= drawCalls[i].firstInstance) return i;
+uint GetDrawCallIndex(uint sourceObjectIndex, out uint objectID) {
+    uint runningSum = 0;
+    uint i = 0;
+    for (; i < drawCount; i++) {
+        runningSum += drawCalls[i].objectCount;
+        if (sourceObjectIndex < runningSum) break;
+    }
+    objectID = sourceObjectIndex - (runningSum - drawCalls[i].objectCount);
+    return i;
 }
 
 layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
@@ -60,13 +54,13 @@ void main() {
     uint sourceObjectIndex = gl_GlobalInvocationID.x;
     if (sourceObjectIndex >= objectCount) return;
 
-    uint baseDrawCall = GetDrawCallIndex(sourceObjectIndex);
-    uint objectID = sourceObjectIndex - drawCalls[baseDrawCall].firstInstance;
+    uint objectID;
+    uint baseDrawCall = GetDrawCallIndex(sourceObjectIndex, objectID);
     uint drawCall = baseDrawCall;
     uint lodCount = GetLodCount(baseDrawCall);
     if (lodCount != 0) {
         uint dataIndex =
-            (drawCalls[baseDrawCall].firstObject + objectID) * drawCalls[baseDrawCall].batchDataElementSize / 4;
+            (drawCalls[baseDrawCall].firstObject + objectID) * drawCalls[baseDrawCall].objectDataElementSize / 4;
         vec3 objectPosition = vec3(batchData[dataIndex + 12], batchData[dataIndex + 13], batchData[dataIndex + 14]);
         float d = distance(objectPosition, cameraPosition) / 100;
         uint lodIndex = min(lodCount, uint(d * lodCount));

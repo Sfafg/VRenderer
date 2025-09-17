@@ -7,6 +7,7 @@
 #include "Mesh.h"
 #include "RenderObject.h"
 #include "VG/VG.h"
+#include "QueryPool.h"
 #include <vector>
 
 class Renderer {
@@ -16,6 +17,7 @@ class Renderer {
     static vg::Image depthImage;
     static vg::ImageView depthImageView;
 
+    static vg::QueryPool queryPool;
     static std::vector<vg::Framebuffer> framebuffers;
     static vg::DescriptorPool descriptorPool;
     static std::vector<vg::DescriptorSet> descriptorSets;

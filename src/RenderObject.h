@@ -24,24 +24,28 @@ class RenderObject {
     RenderObject &operator=(const RenderObject &) = delete;
     ~RenderObject();
 
-    Batch &GetBatch();
-    const Batch &GetBatch() const;
+    void SetData(const void *data, uint32_t byteSize);
+    template <typename T> void SetData(const T &data);
 
-    void SetBatchData(const void *data, uint32_t byteSize);
-    template <typename T> void SetBatchData(const T &data);
+    void ReadData(void *data);
+    template <typename T> T ReadData();
 
-    void ReadBatchData(void *data);
-    template <typename T> T ReadBatchData();
+    static void Reserve(class Mesh *mesh, class Material *material, uint objectCount, uint objectSize);
+    static void ShrinkToFit(class Mesh *mesh, class Material *material);
+    static void SetLOD(
+        class Mesh *mesh, class Material *material, uint objectSize,
+        const std::vector<std::tuple<class Mesh *, class Material *>> &lods
+    );
 };
 
 template <typename T>
 RenderObject::RenderObject(class Mesh *mesh, class Material *material, const T &batchData)
     : RenderObject(mesh, material, sizeof(T), &batchData) {}
 
-template <typename T> void RenderObject::SetBatchData(const T &data) { return SetBatchData(&data, sizeof(T)); }
+template <typename T> void RenderObject::SetData(const T &data) { return SetData(&data, sizeof(T)); }
 
-template <typename T> T RenderObject::ReadBatchData() {
+template <typename T> T RenderObject::ReadData() {
     T t;
-    ReadBatchData(&t);
+    ReadData(&t);
     return t;
 }

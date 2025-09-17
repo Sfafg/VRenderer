@@ -101,9 +101,9 @@ int main() {
             0, 1, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
             vg::Access::ColorAttachmentWrite, {}
         ),
-        glm::vec4(-0.5, 0.5, 0.3, 0.3)
+        glm::vec4(-0.5, 0.5, 0.1, 0.2)
     );
-    Material mat1_2(&mat1_1, glm::vec4(0.5, 0.5, 0.2, 0.3));
+    Material mat1_2(&mat1_1, glm::vec4(0.5, 0.5, 0.1, 0.1));
 
     Renderer::Init(window, &generalQueue, windowSurface, w, h);
 
@@ -114,25 +114,25 @@ int main() {
         sizeof(int), new int[]{0, 1, 2, 2, 3, 0}
     );
 
-    auto [batchID, batchExists] = Batch::Add(&mat1, &testMesh, sizeof(glm::mat4));
-    // Batch::Add(&mat2, &testMesh1, sizeof(glm::mat4));
-    Batch::AddLOD(batchID, &mat3, &testMesh);
-    Batch::AddLOD(batchID, &mat4, &testMesh);
-    Batch::AddLOD(batchID, &mat5, &testMesh);
-    Batch::AddLOD(batchID, &mat6, &testMesh);
+    RenderObject::SetLOD(
+        &testMesh, &mat1, sizeof(glm::mat4),
+        {{&testMesh, &mat3}, {&testMesh, &mat4}, {&testMesh, &mat5}, {&testMesh, &mat6}}
+    );
+    // RenderObject::ShrinkToFit(&testMesh, &mat1);
 
-    const uint objectCount = 900;
-    const float spawnScale = 0.1;
-    RenderObject renderObjects[objectCount];
-    Batch::ReserveObjects(batchID, objectCount);
+    const uint objectCount = 90'000;
+    const float spawnScale = 0.01;
+    std::vector<RenderObject> renderObjects(objectCount);
+    // RenderObject renderObjects[objectCount];
     // RenderObject renderObjects2[objectCount];
+    RenderObject::Reserve(&testMesh, &mat1, objectCount, sizeof(glm::mat4));
     for (int i = 0; i < objectCount; i++) {
         glm::mat4 matrix = glm::translate(
             glm::scale(glm::mat4(1), glm::vec3(0.08)) *
                 glm::rotate(glm::mat4(1), randf(0, 100), glm::vec3(randf(), randf(), randf())),
             glm::vec3(randf(-30, 30), randf(-30, 30), randf(-30, 30)) * spawnScale
         );
-        matrix = glm::scale(glm::mat4(1), glm::vec3(6.08)) *
+        matrix = glm::scale(glm::mat4(1), glm::vec3(0.48)) *
                  glm::translate(
                      glm::mat4(1), glm::vec3((i % (int)sqrt(objectCount)) * 1.1, (i / sqrt(objectCount)) * 1.1, 0)
                  );
@@ -140,12 +140,12 @@ int main() {
         renderObjects[i] = RenderObject(&testMesh, &mat1, matrix);
         // renderObjects2[i] = RenderObject(&testMesh1, &mat2, matrix);
     }
-    // RenderObject renderObject1(&testMesh1_1, &mat1_1, 0.3f);
-    // RenderObject renderObject2(&testMesh1_1, &mat1_2, 1.0f);
+    RenderObject renderObject1(&testMesh1_1, &mat1_1, 0.1f);
+    RenderObject renderObject2(&testMesh1_1, &mat1_2, 0.2f);
 
     glm::dvec2 lastMouseP;
     glfwGetCursorPos(window, &lastMouseP.x, &lastMouseP.y);
-    glm::vec3 cameraPos(0, 0, 0.1f);
+    glm::vec3 cameraPos(100, 0, -5.1f);
     glm::quat cameraRotation(1, 0, 0, 0);
     glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, 0.01f, 100.0f);
 
@@ -182,14 +182,16 @@ int main() {
 
             cameraPos += cameraRotation * direction * 0.5f;
         }
-        for (int i = 0; i < objectCount / 10; i++)
-            renderObjects[(n + i) % objectCount].SetBatchData(
+
+        for (int i = 0; i < 50; i++) renderObjects.erase(renderObjects.begin() + (rand() % renderObjects.size()));
+        for (int i = 0; i < renderObjects.size() / 10; i++)
+            renderObjects[(n + i) % renderObjects.size()].SetData(
                 glm::translate(
-                    renderObjects[(n + i) % objectCount].ReadBatchData<glm::mat4>(),
+                    renderObjects[(n + i) % renderObjects.size()].ReadData<glm::mat4>(),
                     glm::vec3(randf(-0.6, 0.6), randf(-0.6, 0.6), randf(-0.6, 0.6)) * 0.02f
                 )
             );
-        n += objectCount / 10;
+        n += renderObjects.size() / 10;
 
         glm::mat4 view = glm::lookAt(
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
@@ -205,5 +207,7 @@ int main() {
         Renderer::Present(generalQueue);
     }
     Renderer::Destroy();
+    renderObjects.clear();
+    std::cout << "CLEARED\n";
     glfwTerminate();
 }

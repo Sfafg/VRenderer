@@ -59,6 +59,8 @@ void Renderer::Init(void *window, const vg::Queue *queue, vg::SurfaceHandle wind
                                     {DescriptorType::StorageBuffer, swapchain.GetImageCount() * 3}}
     );
 
+    // queryPool = QueryPool(QueryType, uint32_t queryCount);
+
     passBuffer = vg::Buffer(sizeof(PassData), vg::BufferUsage::UniformBuffer);
     vg::Allocate(passBuffer, vg::MemoryProperty::HostVisible);
 

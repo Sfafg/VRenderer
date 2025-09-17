@@ -5,11 +5,11 @@ RenderBuffer::RenderBuffer() {}
 RenderBuffer::RenderBuffer(vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capacity)
     : size(0), bufferUsage(bufferUsage) {
     if (capacity != 0) {
-        stagingBuffer = vg::Buffer(capacity, bufferUsage);
-        renderingBuffer[0] = vg::Buffer(capacity, bufferUsage);
-        renderingBuffer[1] = vg::Buffer(capacity, bufferUsage);
-        vg::Allocate(renderingBuffer[0], {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
-        vg::Allocate(renderingBuffer[1], {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+        stagingBuffer = vg::Buffer(capacity, bufferUsage | vg::BufferUsage::TransferSrc);
+        renderingBuffer[0] = vg::Buffer(capacity, bufferUsage | vg::BufferUsage::TransferDst);
+        renderingBuffer[1] = vg::Buffer(capacity, bufferUsage | vg::BufferUsage::TransferDst);
+        vg::Allocate(renderingBuffer[0], vg::MemoryProperty::DeviceLocal);
+        vg::Allocate(renderingBuffer[1], vg::MemoryProperty::DeviceLocal);
         vg::Allocate(stagingBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
     }
 }
@@ -17,18 +17,38 @@ RenderBuffer::RenderBuffer(vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capa
 RenderBuffer::~RenderBuffer() {}
 
 bool RenderBuffer::FlushBuffer(int index) {
-    bufferChangeFlag = 0;
     if (stagingBuffer.GetSize() != renderingBuffer[index].GetSize()) {
-        vg::Buffer newBuffer(stagingBuffer.GetSize(), bufferUsage);
+        vg::Buffer newBuffer(stagingBuffer.GetSize(), bufferUsage | vg::BufferUsage::TransferDst);
         vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
 
         std::swap(renderingBuffer[index], newBuffer);
-        memcpy(renderingBuffer[index].MapMemory(), stagingBuffer.MapMemory(), stagingBuffer.GetSize());
+        vg::CmdBuffer(vg::currentDevice->GetQueue(0))
+            .Begin()
+            .Append(
+                vg::cmd::CopyBuffer(
+                    stagingBuffer, renderingBuffer[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+                )
+            )
+            .End()
+            .Submit()
+            .Await();
 
+        bufferChangeFlag = 0;
         return true;
     }
-    memcpy(renderingBuffer[index].MapMemory(), stagingBuffer.MapMemory(), stagingBuffer.GetSize());
+    if (bufferChangeFlag.IsSet(BufferChange::Contents))
+        vg::CmdBuffer(vg::currentDevice->GetQueue(0))
+            .Begin()
+            .Append(
+                vg::cmd::CopyBuffer(
+                    stagingBuffer, renderingBuffer[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+                )
+            )
+            .End()
+            .Submit()
+            .Await();
 
+    bufferChangeFlag = 0;
     return false;
 }
 
@@ -108,16 +128,16 @@ void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
     uint32_t writeOffset = offsets[regionID];
     uint32_t removedSize = sizes[regionID];
 
-    if (removedSize != 0)
-        for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
-            uint32_t padding = GetPadding(i, writeOffset);
-            writeOffset += padding;
+    if (removedSize != 0) bufferChangeFlag.Set(BufferChange::Contents);
+    for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
+        uint32_t padding = GetPadding(i, writeOffset);
+        writeOffset += padding;
 
-            memcpy(stagingBuffer.MapMemory() + writeOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
+        memcpy(stagingBuffer.MapMemory() + writeOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
 
-            offsets[i] = writeOffset;
-            writeOffset += sizes[i];
-        }
+        offsets[i] = writeOffset;
+        writeOffset += sizes[i];
+    }
     sizes.erase(sizes.begin() + regionID);
     offsets.erase(offsets.begin() + regionID);
     alignments.erase(alignments.begin() + regionID);
@@ -133,7 +153,7 @@ void RenderBuffer::Reserve(uint32_t capacity) {
     if (capacity <= stagingBuffer.GetSize()) return;
     bufferChangeFlag.Set(BufferChange::Size);
 
-    vg::Buffer newBuffer(capacity, bufferUsage);
+    vg::Buffer newBuffer(capacity, bufferUsage | vg::BufferUsage::TransferSrc);
     vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
     if (stagingBuffer.GetSize() > 0) memcpy(newBuffer.MapMemory(), stagingBuffer.MapMemory(), stagingBuffer.GetSize());
 

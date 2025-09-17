@@ -4,126 +4,239 @@
 #include "Material.h"
 #include <algorithm>
 
-Batch::Batch() {}
-uint Batch::LodCount() const { return lodCountPointerParent >> 28 & 0b1111; }
-uint Batch::LodPointer() const { return lodCountPointerParent >> 14 & 0b11111111111111; }
-uint Batch::ParentPointer() const { return lodCountPointerParent & 0b11111111111111; }
-void Batch::SetLodCount(uint count) { lodCountPointerParent = (lodCountPointerParent & ~(0b1111 << 28)) | count << 28; }
-void Batch::SetLodPointer(uint pointer) {
-    lodCountPointerParent = (lodCountPointerParent & ~(0b11111111111111 << 14)) | pointer << 14;
+bool Batch::Exists(Mesh *mesh, Material *material) {
+    std::tuple key{material, mesh};
+    auto it = std::lower_bound(batches.begin(), batches.end(), key, [](const auto &a, const auto &b) { return a < b; });
+    return it != Batch::batches.end() && key == *it;
 }
-void Batch::SetParentPointer(uint pointer) {
-    lodCountPointerParent = (lodCountPointerParent & ~0b11111111111111) | pointer;
-}
-
-Batch *Batch::GetNextLod() const {
-    auto lod = LodPointer();
-    if (lod == 0b11111111111111) return nullptr;
-    return &batches[lod];
-}
-Batch *Batch::GetLodParent() const {
-    auto lod = ParentPointer();
-    if (lod == 0b11111111111111) return nullptr;
-    return &batches[lod];
-}
-
-std::tuple<uint, bool> Batch::Add(Material *material, Mesh *mesh, uint objectByteSize, bool isLod) {
-    auto [index, exists] = Get(material, mesh);
-
-    if (!exists) {
-        uint instanceMappingRegion = 0;
-        if (!isLod) {
-            for (int i = 0; i < index; i++)
-                if (batches[i].GetLodParent() == nullptr) instanceMappingRegion++;
-        } else instanceMappingRegion = batches.size();
-        for (int i = 0; i < instanceMappingRegionIndex.size(); i++)
-            if (instanceMappingRegionIndex[i] >= instanceMappingRegion) instanceMappingRegionIndex[i]++;
-
-        Batch batch;
-        batch.materialIndex =
-            Material::materialBuffer.Offset(material->index) / Material::materialBuffer.Alignment(material->index) +
-            material->variant;
-        batch.meshIndex = mesh->index;
-        batch.batchDataElementSize = objectByteSize;
-        batch.lodCountPointerParent = NULL_LOD;
-
-        batches.emplace(batches.begin() + index, std::move(batch));
-        renderObjects.insert(renderObjects.begin() + index, std::vector<RenderObject *>());
-        materialIndices.insert(materialIndices.begin() + index, {material->index, material->variant});
-        instanceMappingRegionIndex.insert(instanceMappingRegionIndex.begin() + index, instanceMappingRegion);
-
-        drawCallBuffer.Allocate(sizeof(Batch), sizeof(Batch), index);
-        objectBuffer.Allocate(0, objectByteSize, index);
-        instanceMappingBuffer.Allocate(0, sizeof(InstanceMapping), instanceMappingRegion);
-
-        batch.firstInstance = instanceMappingBuffer.Offset(instanceMappingRegion) /
-                              instanceMappingBuffer.Alignment(instanceMappingRegion);
-        if (!isLod) batch.firstObject = objectBuffer.Offset(index) / objectBuffer.Alignment(index);
-        drawCallBuffer.Write(index, batch);
-
-        FixAfterBatchChange(index, 1);
-    }
-
-    return {index, exists};
-}
-
-std::tuple<uint, bool> Batch::Get(Material *material, Mesh *mesh) {
+uint Batch::Add(Mesh *mesh, Material *material, uint objectByteSize) {
     std::tuple key{material, mesh};
     auto it = std::lower_bound(batches.begin(), batches.end(), key, [](const auto &a, const auto &b) { return a < b; });
     bool exists = it != Batch::batches.end() && key == *it;
     uint index = it - batches.begin();
-    return {index, exists};
+    if (exists) return index;
+
+    Batch batch;
+    batch.materialIndex =
+        Material::materialBuffer.Offset(material->index) / Material::materialBuffer.Alignment(material->index) +
+        material->variant;
+    batch.meshIndex = mesh->index;
+    batch.objectDataElementSize = objectByteSize;
+    batch.lodCountPointerParent = 0x0FFFFFFF;
+    batch.objectCount = 0;
+
+    drawCallBuffer.Allocate(sizeof(Batch), sizeof(Batch), index);
+    objectBuffer.Allocate(0, objectByteSize, index);
+    instanceMappingBuffer.Allocate(0, sizeof(InstanceMapping), index);
+
+    batch.firstInstance = instanceMappingBuffer.Offset(index) / instanceMappingBuffer.Alignment(index);
+    batch.firstObject = objectBuffer.Offset(index) / objectBuffer.Alignment(index);
+    drawCallBuffer.Write(index, batch);
+
+    batches.emplace(batches.begin() + index, std::move(batch));
+    renderObjects.insert(renderObjects.begin() + index, std::vector<RenderObject *>());
+    materialIndices.insert(materialIndices.begin() + index, {material->index, material->variant});
+
+    for (int i = index + 1; i < batches.size(); i++) {
+        for (int j = 0; j < renderObjects[i].size(); j++) renderObjects[i][j]->batchIndex = i;
+    }
+    for (int i = 0; i < batches.size(); i++) {
+        // Lod Pointer and Parent.
+        auto &batch = batches[i];
+        if (batch.ParentPointer() != 0b11111111111111 && batch.ParentPointer() > index + 1)
+            batch.SetParentPointer(batch.ParentPointer() + 1);
+        if (batch.LodPointer() != 0b11111111111111 && batch.LodPointer() > index + 1)
+            batch.SetLodPointer(batch.LodPointer() + 1);
+        drawCallBuffer.Write(i, batch.lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
+    }
+    return index;
+}
+
+uint Batch::Get(Mesh *mesh, Material *material) {
+    std::tuple key{material, mesh};
+    auto it = std::lower_bound(batches.begin(), batches.end(), key, [](const auto &a, const auto &b) { return a < b; });
+    uint index = it - batches.begin();
+    return index;
 }
 
 void Batch::Remove(uint index) {
+    assert(index < batches.size() && "Invalid Batch ID.");
+
+    auto remove = [](uint index) {
+        totalObjects -= batches[index].objectCount;
+        batches.erase(batches.begin() + index);
+        renderObjects.erase(renderObjects.begin() + index);
+        materialIndices.erase(materialIndices.begin() + index);
+        drawCallBuffer.Deallocate(index);
+        objectBuffer.Deallocate(index);
+        instanceMappingBuffer.Deallocate(index);
+
+        // Lod Pointer and Parent.
+        for (int i = index; i < batches.size(); i++) {
+            auto &batch = batches[i];
+            if (batch.GetLodParent() && batch.ParentPointer() > index)
+                batch.SetParentPointer(batch.ParentPointer() - 1);
+            if (batch.GetNextLod() && batch.LodPointer() > index) batch.SetLodPointer(batch.LodPointer() - 1);
+            drawCallBuffer.Write(i, batch.lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
+        }
+    };
+
+    uint minIndex = index;
     for (int i = batches[index].LodCount(); i > 0; i--) {
         uint lodTail = index;
         for (int j = 0; j < i; j++) lodTail = batches[lodTail].LodPointer();
-        Remove(lodTail);
+        remove(lodTail);
+        minIndex = std::min(minIndex, lodTail);
         if (index > lodTail) index--;
     }
 
-    uint objectCount = renderObjects[index].size();
-    renderObjects[index].clear();
-    instanceMappingBuffer.Deallocate(instanceMappingRegionIndex[index]);
-    totalObjects -= objectCount;
-    FixAfterObjectChange(index, 0, -objectCount);
+    remove(index);
 
-    for (int i = 0; i < instanceMappingRegionIndex.size(); i++)
-        if (instanceMappingRegionIndex[i] >= instanceMappingRegionIndex[index]) instanceMappingRegionIndex[i]--;
-    batches.erase(batches.begin() + index);
-    materialIndices.erase(materialIndices.begin() + index);
-    renderObjects.erase(renderObjects.begin() + index);
-    instanceMappingRegionIndex.erase(instanceMappingRegionIndex.begin() + index);
+    // Render Objects.
+    for (int i = minIndex; i < batches.size(); i++) {
+        for (int j = 0; j < renderObjects[i].size(); j++) renderObjects[i][j]->batchIndex = i;
+    }
+    for (int i = minIndex; i < batches.size(); i++) {
+        // First Instance.
+        auto &batch = batches[i];
+        batch.firstInstance = instanceMappingBuffer.Offset(i) / instanceMappingBuffer.Alignment(i);
+        drawCallBuffer.Write(i, batch.firstInstance, offsetof(Batch, firstInstance));
 
-    drawCallBuffer.Deallocate(index);
-    objectBuffer.Deallocate(index);
-
-    FixAfterBatchChange(index, -1);
+        // First object.
+        if (batch.GetLodParent() == nullptr) batch.firstObject = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
+        else batch.firstObject = batch.GetLodParent()->firstObject;
+        drawCallBuffer.Write(i, batches[i].firstObject, offsetof(Batch, firstObject));
+    }
 }
 
-void Batch::ReserveObjects(uint batchIndex, uint objectCount) {
-    instanceMappingBuffer.Reserve(objectCount * sizeof(InstanceMapping) * (batches[batchIndex].LodCount() + 1));
-    objectBuffer.Reserve(objectCount * objectBuffer.Alignment(batchIndex));
+void Batch::SetLOD(uint batchIndex, const std::vector<std::tuple<class Mesh *, class Material *>> &lods) {
+    assert(batchIndex < batches.size() && "Invalid Batch ID.");
+    assert(batches[batchIndex].LodCount() == 0 && "Changing LODs has to be implemented.");
+    assert(!batches[batchIndex].IsLOD() && "Cannot assign LOD to LOD batch.");
+
+    uint minIndex = batchIndex;
+    for (auto &&[mesh, material] : lods) {
+        assert(!Exists(mesh, material) && "Cannot assign already used batch as LOD.");
+        uint index = Add(mesh, material, batches[batchIndex].objectDataElementSize);
+
+        uint tailIndex = batchIndex;
+        for (int i = 0; i < batches[batchIndex].LodCount(); i++) tailIndex = batches[tailIndex].LodPointer();
+
+        batches[tailIndex].SetLodPointer(index);
+        batches[batchIndex].SetLodCount(batches[batchIndex].LodCount() + 1);
+        batches[index].SetParentPointer(batchIndex);
+        batches[index].firstObject = objectBuffer.Offset(batchIndex) / objectBuffer.Alignment(batchIndex);
+
+        drawCallBuffer.Write(
+            tailIndex, batches[tailIndex].lodCountPointerParent, offsetof(Batch, lodCountPointerParent)
+        );
+        drawCallBuffer.Write(
+            batchIndex, batches[batchIndex].lodCountPointerParent, offsetof(Batch, lodCountPointerParent)
+        );
+        drawCallBuffer.Write(index, batches[index].lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
+        drawCallBuffer.Write(index, batches[index].firstObject, offsetof(Batch, firstObject));
+        instanceMappingBuffer.Reallocate(index, instanceMappingBuffer.Size(batchIndex));
+
+        for (int i = index + 1; i < batches.size(); i++) {
+            auto &batch = batches[i];
+            if (batch.GetLodParent() && batch.ParentPointer() > index)
+                batch.SetParentPointer(batch.ParentPointer() - 1);
+            if (batch.GetNextLod() && batch.LodPointer() > index) batch.SetLodPointer(batch.LodPointer() - 1);
+            drawCallBuffer.Write(i, batch.lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
+        }
+
+        minIndex = std::min(minIndex, index);
+        if (index <= batchIndex) batchIndex++;
+    }
+
+    // Render Objects.
+    for (int i = minIndex + 1; i < batches.size(); i++) {
+        for (int j = 0; j < renderObjects[i].size(); j++) renderObjects[i][j]->batchIndex = i;
+    }
+    for (int i = minIndex + 1; i < batches.size(); i++) {
+        // First Instance.
+        auto &batch = batches[i];
+        batch.firstInstance = instanceMappingBuffer.Offset(i) / instanceMappingBuffer.Alignment(i);
+        drawCallBuffer.Write(i, batch.firstInstance, offsetof(Batch, firstInstance));
+
+        // First object.
+        if (batch.GetLodParent() == nullptr) batch.firstObject = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
+        else batch.firstObject = batch.GetLodParent()->firstObject;
+        drawCallBuffer.Write(i, batches[i].firstObject, offsetof(Batch, firstObject));
+    }
 }
 
-void Batch::AddLOD(uint batchIndex, Material *material, Mesh *mesh) {
-    auto [index, exists] = Add(material, mesh, batches[batchIndex].batchDataElementSize, true);
-    assert(!exists || (batches[index].GetLodParent() != nullptr) && "Cannot set non LOD batch as LOD.");
+void Batch::ReserveObjects(uint index, uint objectCount) {
+    assert(index < batches.size() && "Invalid Batch ID.");
+    if (objectCount <= GetObjectCapacity(index)) return;
+    assert(!batches[index].IsLOD() && "Cannot shrink to fit objects to LOD batch.");
 
-    uint tailIndex = batchIndex;
-    for (int i = 0; i < batches[batchIndex].LodCount(); i++) tailIndex = batches[tailIndex].LodPointer();
-    batches[tailIndex].SetLodPointer(index);
-    batches[batchIndex].SetLodCount(batches[batchIndex].LodCount() + 1);
-    batches[index].SetParentPointer(batchIndex);
-    batches[index].firstObject = objectBuffer.Offset(batchIndex) / objectBuffer.Alignment(batchIndex);
+    renderObjects[index].reserve(objectCount);
+    objectBuffer.Reallocate(index, objectBuffer.Alignment(index) * objectCount);
+    instanceMappingBuffer.Reallocate(index, sizeof(InstanceMapping) * objectCount);
 
-    drawCallBuffer.Write(tailIndex, batches[tailIndex].lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
-    drawCallBuffer.Write(batchIndex, batches[batchIndex].lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
-    drawCallBuffer.Write(index, batches[index].lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
-    drawCallBuffer.Write(index, batches[index].firstObject, offsetof(Batch, firstObject));
-    instanceMappingBuffer.Reallocate(index, instanceMappingBuffer.Size(instanceMappingRegionIndex[batchIndex]));
-    FixAfterObjectChange(index, 0, renderObjects[batchIndex].size());
+    uint minIndex = index;
+    uint tailIndex = index;
+    while ((tailIndex = batches[tailIndex].LodPointer()) != 0b11111111111111) {
+        instanceMappingBuffer.Reallocate(tailIndex, instanceMappingBuffer.Size(index));
+        minIndex = std::min(minIndex, tailIndex);
+    }
+
+    for (int i = minIndex + 1; i < batches.size(); i++) {
+        // First Instance.
+        auto &batch = batches[i];
+        batch.firstInstance = instanceMappingBuffer.Offset(i) / instanceMappingBuffer.Alignment(i);
+        drawCallBuffer.Write(i, batch.firstInstance, offsetof(Batch, firstInstance));
+
+        // First object.
+        if (batch.GetLodParent() == nullptr) batch.firstObject = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
+        else batch.firstObject = batch.GetLodParent()->firstObject;
+        drawCallBuffer.Write(i, batches[i].firstObject, offsetof(Batch, firstObject));
+    }
+}
+
+void Batch::ShrinkToFit(uint index) {
+    assert(index < batches.size() && "Invalid Batch ID.");
+    assert(!batches[index].IsLOD() && "Cannot shrink to fit objects to LOD batch.");
+    uint objectCount = GetObjectCount(index);
+    uint objectCapacity = GetObjectCapacity(index);
+    if (objectCount == 0) {
+        Remove(index);
+        return;
+    }
+    if (objectCount >= objectCapacity) return;
+    renderObjects[index].shrink_to_fit();
+    objectBuffer.Reallocate(index, objectBuffer.Alignment(index) * objectCount);
+    instanceMappingBuffer.Reallocate(index, sizeof(InstanceMapping) * objectCount);
+
+    uint minIndex = index;
+    uint tailIndex = index;
+    while ((tailIndex = batches[tailIndex].LodPointer()) != 0b11111111111111) {
+        instanceMappingBuffer.Reallocate(tailIndex, instanceMappingBuffer.Size(index));
+        minIndex = std::min(minIndex, tailIndex);
+    }
+
+    for (int i = minIndex + 1; i < batches.size(); i++) {
+        // First Instance.
+        auto &batch = batches[i];
+        batch.firstInstance = instanceMappingBuffer.Offset(i) / instanceMappingBuffer.Alignment(i);
+        drawCallBuffer.Write(i, batch.firstInstance, offsetof(Batch, firstInstance));
+
+        // First object.
+        if (batch.GetLodParent() == nullptr) batch.firstObject = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
+        else batch.firstObject = batch.GetLodParent()->firstObject;
+        drawCallBuffer.Write(i, batches[i].firstObject, offsetof(Batch, firstObject));
+    }
+}
+
+uint Batch::GetObjectCapacity(uint index) {
+    assert(index < batches.size() && "Invalid Batch ID.");
+    return instanceMappingBuffer.Size(index) / instanceMappingBuffer.Alignment(index);
+}
+
+uint Batch::GetObjectCount(uint index) {
+    assert(index < batches.size() && "Invalid Batch ID.");
+    return batches[index].objectCount;
 }
 
 bool Batch::operator==(const std::tuple<Material *, Mesh *> &o) const {
@@ -142,6 +255,43 @@ bool Batch::operator<(const std::tuple<Material *, Mesh *> &o) const {
     if (variant < std::get<Material *>(o)->variant) return true;
     if (variant > std::get<Material *>(o)->variant) return false;
     return meshIndex < std::get<Mesh *>(o)->index;
+}
+
+void Batch::AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize) {
+    auto index = Add(mesh, material, objectByteSize);
+    assert(!batches[index].IsLOD() && "Cannot add objects to LOD batch.");
+    renderObject->batchIndex = index;
+    renderObject->objectDataIndex = renderObjects[index].size();
+
+    if (GetObjectCount(index) + 1 >= GetObjectCapacity(index)) ReserveObjects(index, GetObjectCount(index) + 1);
+
+    totalObjects++;
+    batches[index].objectCount++;
+    drawCallBuffer.Write(index, batches[index].objectCount, offsetof(Batch, objectCount));
+    renderObjects[index].push_back(renderObject);
+}
+
+void Batch::RemoveObject(RenderObject *renderObject) {
+    auto index = renderObject->batchIndex;
+    auto dataIndex = renderObject->objectDataIndex;
+
+    if (renderObjects[index].size() > 0) {
+        totalObjects--;
+        batches[index].objectCount--;
+        std::swap(renderObjects[index][dataIndex], renderObjects[index][renderObjects[index].size() - 1]);
+        renderObjects[index][dataIndex]->objectDataIndex = dataIndex;
+        renderObjects[index].pop_back();
+        // Move object and instance mapping data.
+        void *data = new char[objectBuffer.Alignment(index)];
+        objectBuffer.Read(
+            index, data, objectBuffer.Alignment(index), objectBuffer.Alignment(index) * batches[index].objectCount
+        );
+        objectBuffer.Write(index, data, objectBuffer.Alignment(index), objectBuffer.Alignment(index) * dataIndex);
+        delete[] data;
+        drawCallBuffer.Write(index, batches[index].objectCount, offsetof(Batch, objectCount));
+    }
+
+    if (renderObjects[index].size() == 0) Remove(index);
 }
 
 void Batch::NotifyMaterialDestroy(uint index) {
@@ -185,114 +335,42 @@ void Batch::NotifyMeshDestroy(uint index) {
     }
 }
 
-void Batch::AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize) {
-    auto [index, exists] = Add(material, mesh, objectByteSize);
-    assert(batches[index].GetLodParent() == nullptr && "Cannot add objects to LOD batch.");
-    renderObject->batchIndex = index;
-    renderObject->objectDataIndex = renderObjects[index].size();
-    totalObjects++;
+Batch::Batch() {}
 
-    renderObjects[index].push_back(renderObject);
-    objectBuffer.Reallocate(index, objectBuffer.Size(index) + objectByteSize);
-    instanceMappingBuffer.Reallocate(
-        instanceMappingRegionIndex[index],
-        instanceMappingBuffer.Size(instanceMappingRegionIndex[index]) + sizeof(InstanceMapping)
-    );
+uint Batch::LodCount() const { return lodCountPointerParent >> 28 & 0b1111; }
 
-    uint tailIndex = index;
-    while ((tailIndex = batches[tailIndex].LodPointer()) != 0b11111111111111) {
-        instanceMappingBuffer.Reallocate(
-            instanceMappingRegionIndex[tailIndex], instanceMappingBuffer.Size(instanceMappingRegionIndex[index])
-        );
-        FixAfterObjectChange(tailIndex, renderObject->objectDataIndex, 1);
-    }
+uint Batch::LodPointer() const { return lodCountPointerParent >> 14 & 0b11111111111111; }
 
-    FixAfterObjectChange(index, renderObject->objectDataIndex, 1);
+uint Batch::ParentPointer() const { return lodCountPointerParent & 0b11111111111111; }
+
+void Batch::SetLodCount(uint count) { lodCountPointerParent = (lodCountPointerParent & ~(0b1111 << 28)) | count << 28; }
+
+void Batch::SetLodPointer(uint pointer) {
+    lodCountPointerParent = (lodCountPointerParent & ~(0b11111111111111 << 14)) | pointer << 14;
 }
 
-void Batch::RemoveObject(RenderObject *renderObject) {
-    auto batchIndex = renderObject->batchIndex;
-    auto dataIndex = renderObject->objectDataIndex;
-
-    if (renderObjects[batchIndex].size() != 0) {
-        totalObjects--;
-        renderObjects[batchIndex].erase(renderObjects[batchIndex].begin() + dataIndex);
-        instanceMappingBuffer.Erase(
-            instanceMappingRegionIndex[batchIndex], sizeof(InstanceMapping), dataIndex * sizeof(InstanceMapping)
-        );
-        if (objectBuffer.Alignment(batchIndex) != 0)
-            objectBuffer.Erase(
-                batchIndex, objectBuffer.Alignment(batchIndex), dataIndex * objectBuffer.Alignment(batchIndex)
-            );
-
-        uint tailIndex = batchIndex;
-        while ((tailIndex = batches[tailIndex].LodPointer()) != 0b11111111111111) {
-            instanceMappingBuffer.Erase(
-                instanceMappingRegionIndex[tailIndex], sizeof(InstanceMapping), dataIndex * sizeof(InstanceMapping)
-            );
-            FixAfterObjectChange(batchIndex, dataIndex, -1);
-        }
-        FixAfterObjectChange(batchIndex, dataIndex, -1);
-    }
-
-    if (renderObjects[batchIndex].size() == 0) Remove(batchIndex);
+void Batch::SetParentPointer(uint pointer) {
+    lodCountPointerParent = (lodCountPointerParent & ~0b11111111111111) | pointer;
 }
 
-void Batch::FixAfterObjectChange(uint batchID, uint firstObject, int objectDelta) {
-    if (objectDelta == 0) return;
+bool Batch::IsLOD() const { return ParentPointer() != 0b11111111111111; }
 
-    uint lastObject = firstObject;
-    if (objectDelta > 0) lastObject += objectDelta;
-
-    // Render Objects.
-    for (int i = lastObject; i < renderObjects[batchID].size(); i++)
-        renderObjects[batchID][i]->objectDataIndex += objectDelta;
-
-    // First Instance.
-    for (int i = 0; i < batches.size(); i++) {
-        auto &batch = batches[i];
-        batch.firstInstance = instanceMappingBuffer.Offset(instanceMappingRegionIndex[i]) /
-                              instanceMappingBuffer.Alignment(instanceMappingRegionIndex[i]);
-        drawCallBuffer.Write(i, batch.firstInstance, offsetof(Batch, firstInstance));
-
-        // First object.
-        if (batch.GetLodParent() == nullptr) batch.firstObject = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
-        else batch.firstObject = batch.GetLodParent()->firstObject;
-        drawCallBuffer.Write(i, batches[i].firstObject, offsetof(Batch, firstObject));
-    }
+Batch *Batch::GetNextLod() const {
+    auto lod = LodPointer();
+    if (lod == 0b11111111111111) return nullptr;
+    assert(lod < batches.size() && "Invalid Batch ID.");
+    return &batches[lod];
 }
-
-void Batch::FixAfterBatchChange(uint firstBatch, int batchDelta) {
-    if (batchDelta == 0) return;
-
-    uint lastBatch = firstBatch;
-    if (batchDelta > 0) lastBatch += batchDelta;
-    if (lastBatch >= batches.size()) return;
-
-    // Render Objects.
-    for (int i = lastBatch; i < renderObjects[lastBatch].size(); i++)
-        renderObjects[lastBatch][i]->batchIndex += batchDelta;
-
-    // Lod Pointer and Parent.
-    for (int i = 0; i < batches.size(); i++) {
-        auto &batch = batches[i];
-        if (batch.ParentPointer() != 0b11111111111111 && batch.ParentPointer() > lastBatch)
-            batch.SetParentPointer(batch.ParentPointer() + batchDelta);
-        if (batch.LodPointer() != 0b11111111111111 && batch.LodPointer() > lastBatch)
-            batch.SetLodPointer(batch.LodPointer() + batchDelta);
-        drawCallBuffer.Write(i, batch.lodCountPointerParent, offsetof(Batch, lodCountPointerParent));
-
-        // First object.
-        if (batch.GetLodParent() == nullptr) batch.firstObject = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
-        else batch.firstObject = batch.GetLodParent()->firstObject;
-        drawCallBuffer.Write(i, batches[i].firstObject, offsetof(Batch, firstObject));
-    }
+Batch *Batch::GetLodParent() const {
+    auto lod = ParentPointer();
+    if (lod == 0b11111111111111) return nullptr;
+    assert(lod < batches.size() && "Invalid Batch ID.");
+    return &batches[lod];
 }
 
 uint Batch::totalObjects;
 std::vector<Batch> Batch::batches;
 std::vector<std::tuple<uint16_t, uint16_t>> Batch::materialIndices;
-std::vector<uint> Batch::instanceMappingRegionIndex;
 RenderBuffer Batch::drawCallBuffer({vg::BufferUsage::StorageBuffer, vg::BufferUsage::IndirectBuffer});
 RenderBuffer Batch::instanceMappingBuffer({vg::BufferUsage::StorageBuffer, vg::BufferUsage::VertexBuffer});
 std::vector<std::vector<RenderObject *>> Batch::renderObjects;

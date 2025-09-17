@@ -5,7 +5,7 @@
 
 RenderObject::RenderObject(Mesh *mesh, Material *material, uint32_t objectByteSize, const void *data) {
     Batch::AddObject(this, mesh, material, objectByteSize);
-    if (data) Batch::objectBuffer.Write(batchIndex, data, objectByteSize, objectDataIndex * objectByteSize);
+    if (data) SetData(data, objectByteSize);
 }
 
 RenderObject::RenderObject() : batchIndex(-1U), objectDataIndex(0) {}
@@ -21,8 +21,7 @@ RenderObject &RenderObject::operator=(RenderObject &&o) {
 
     if (batchIndex != -1U && o.batchIndex != -1U) {
         std::swap(
-            Batch::batches[batchIndex].renderObjects[objectDataIndex],
-            Batch::batches[o.batchIndex].renderObjects[o.objectDataIndex]
+            Batch::renderObjects[batchIndex][objectDataIndex], Batch::renderObjects[o.batchIndex][o.objectDataIndex]
         );
     } else if (o.batchIndex != -1U) Batch::renderObjects[o.batchIndex][o.objectDataIndex] = this;
 
@@ -38,16 +37,34 @@ RenderObject::~RenderObject() {
     batchIndex = -1U;
 }
 
-Batch &RenderObject::GetBatch() { return Batch::batches[batchIndex]; }
-const Batch &RenderObject::GetBatch() const { return Batch::batches[batchIndex]; }
-
-void RenderObject::SetBatchData(const void *data, uint32_t byteSize) {
+void RenderObject::SetData(const void *data, uint32_t byteSize) {
     Batch::objectBuffer.Write(batchIndex, data, byteSize, Batch::objectBuffer.Alignment(batchIndex) * objectDataIndex);
 }
 
-void RenderObject::ReadBatchData(void *data) {
+void RenderObject::ReadData(void *data) {
     Batch::objectBuffer.Read(
         batchIndex, data, Batch::objectBuffer.Alignment(batchIndex),
         Batch::objectBuffer.Alignment(batchIndex) * objectDataIndex
     );
+}
+
+void RenderObject::Reserve(class Mesh *mesh, class Material *material, uint objectCount, uint objectSize) {
+    if (!Batch::Exists(mesh, material)) Batch::Add(mesh, material, objectSize);
+    uint id = Batch::Get(mesh, material);
+    Batch::ReserveObjects(id, objectCount);
+}
+
+void RenderObject::ShrinkToFit(class Mesh *mesh, class Material *material) {
+    if (!Batch::Exists(mesh, material)) return;
+    uint id = Batch::Get(mesh, material);
+    Batch::ShrinkToFit(id);
+}
+
+void RenderObject::SetLOD(
+    class Mesh *mesh, class Material *material, uint objectSize,
+    const std::vector<std::tuple<class Mesh *, class Material *>> &lods
+) {
+    if (!Batch::Exists(mesh, material)) Batch::Add(mesh, material, objectSize);
+    uint id = Batch::Get(mesh, material);
+    Batch::SetLOD(id, lods);
 }

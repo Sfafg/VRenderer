@@ -1,17 +1,5 @@
 #version 450
-
-struct DrawCall {
-    uint indexCount;
-    uint instanceCount;
-    uint firstIndex;
-    uint vertexOffset;
-    uint firstInstance;
-    uint materialIndex;
-    uint meshIndex;
-    uint batchDataElementSize;
-    uint lodCountPointerParent;
-    uint firstObject;
-};
+#include "DrawCall.glsl"
 
 layout(set = 0, binding = 1) readonly buffer MaterialData { vec4 offset[]; };
 
