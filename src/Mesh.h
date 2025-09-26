@@ -14,11 +14,6 @@ class Mesh {
         uint32_t vertexOffset;
     };
 
-    static RenderBuffer vertexBuffer;
-    static RenderBuffer indexBuffer;
-    static RenderBuffer meshDataBuffer;
-    static std::vector<Mesh *> meshes;
-
     uint32_t index;
 
   public:

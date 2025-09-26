@@ -11,26 +11,6 @@ class Batch {
         uint objectDataIndex;
         uint batchIndex;
     };
-    static uint totalObjects;
-    static std::vector<Batch> batches;
-    static std::vector<std::tuple<uint16_t, uint16_t>> materialIndices;
-    static std::vector<std::vector<RenderObject *>> renderObjects;
-    static RenderBuffer instanceMappingBuffer;
-    static RenderBuffer drawCallBuffer;
-    static RenderBuffer objectBuffer;
-
-    uint indexCount;
-    uint instanceCount;
-    uint firstIndex;
-    uint vertexOffset;
-    uint firstInstance;
-    uint materialIndex = -1U;
-    uint meshIndex = -1U;
-    uint objectDataElementSize;
-    uint lodCountPointerParent;
-    uint firstObject;
-    uint objectCount;
-
     static bool Exists(Mesh *mesh, Material *material);
     static uint Add(Mesh *mesh, Material *material, uint objectByteSize);
     static uint Get(Mesh *mesh, Material *material);
@@ -47,14 +27,11 @@ class Batch {
 
   private:
     friend RenderObject;
-
     static void AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize);
     static void RemoveObject(RenderObject *renderObject);
 
-  private:
     friend Mesh;
     friend Material;
-
     static void NotifyMaterialDestroy(uint index);
     static void NotifyVariantDestroy(uint materialIndex, uint index);
     static void NotifyMeshDestroy(uint index);
@@ -70,4 +47,16 @@ class Batch {
     bool IsLOD() const;
     Batch *GetNextLod() const;
     Batch *GetLodParent() const;
+
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    uint vertexOffset;
+    uint firstInstance;
+    uint materialIndex = -1U;
+    uint meshIndex = -1U;
+    uint objectDataElementSize;
+    uint lodCountPointerParent;
+    uint firstObject;
+    uint objectCount;
 };

@@ -2,31 +2,33 @@
 
 RenderBuffer::RenderBuffer() {}
 
-RenderBuffer::RenderBuffer(vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capacity)
-    : size(0), bufferUsage(bufferUsage) {
+RenderBuffer::RenderBuffer(uint maxFramesInFlight, vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capacity)
+    : size(0), bufferUsage(bufferUsage), renderingBuffers(maxFramesInFlight), bufferChangeFlag(0) {
     if (capacity != 0) {
         stagingBuffer = vg::Buffer(capacity, bufferUsage | vg::BufferUsage::TransferSrc);
-        renderingBuffer[0] = vg::Buffer(capacity, bufferUsage | vg::BufferUsage::TransferDst);
-        renderingBuffer[1] = vg::Buffer(capacity, bufferUsage | vg::BufferUsage::TransferDst);
-        vg::Allocate(renderingBuffer[0], vg::MemoryProperty::DeviceLocal);
-        vg::Allocate(renderingBuffer[1], vg::MemoryProperty::DeviceLocal);
         vg::Allocate(stagingBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
+        for (int i = 0; i < renderingBuffers.size(); i++) {
+            renderingBuffers[i] = vg::Buffer(capacity, bufferUsage | vg::BufferUsage::TransferDst);
+            vg::Allocate(renderingBuffers[i], vg::MemoryProperty::DeviceLocal);
+        }
     }
 }
 
 RenderBuffer::~RenderBuffer() {}
 
 bool RenderBuffer::FlushBuffer(int index) {
-    if (stagingBuffer.GetSize() != renderingBuffer[index].GetSize()) {
-        vg::Buffer newBuffer(stagingBuffer.GetSize(), bufferUsage | vg::BufferUsage::TransferDst);
-        vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
+    assert(index < renderingBuffers.size());
 
-        std::swap(renderingBuffer[index], newBuffer);
+    if (stagingBuffer.GetSize() != renderingBuffers[index].GetSize()) {
+        vg::Buffer newBuffer(stagingBuffer.GetSize(), bufferUsage | vg::BufferUsage::TransferDst);
+        vg::Allocate(newBuffer, vg::MemoryProperty::DeviceLocal);
+        std::swap(renderingBuffers[index], newBuffer);
+
         vg::CmdBuffer(vg::currentDevice->GetQueue(0))
             .Begin()
             .Append(
                 vg::cmd::CopyBuffer(
-                    stagingBuffer, renderingBuffer[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+                    stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
                 )
             )
             .End()
@@ -36,12 +38,13 @@ bool RenderBuffer::FlushBuffer(int index) {
         bufferChangeFlag = 0;
         return true;
     }
+
     if (bufferChangeFlag.IsSet(BufferChange::Contents))
         vg::CmdBuffer(vg::currentDevice->GetQueue(0))
             .Begin()
             .Append(
                 vg::cmd::CopyBuffer(
-                    stagingBuffer, renderingBuffer[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+                    stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
                 )
             )
             .End()
@@ -52,8 +55,8 @@ bool RenderBuffer::FlushBuffer(int index) {
     return false;
 }
 
-vg::Buffer &RenderBuffer::GetBuffer(int index) { return renderingBuffer[index]; }
-const vg::Buffer &RenderBuffer::GetBuffer(int index) const { return renderingBuffer[index]; }
+vg::Buffer &RenderBuffer::GetBuffer(int index) { return renderingBuffers[index]; }
+const vg::Buffer &RenderBuffer::GetBuffer(int index) const { return renderingBuffers[index]; }
 
 uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment, uint32_t targetRegionID) {
     bufferChangeFlag.Set(BufferChange::Contents);

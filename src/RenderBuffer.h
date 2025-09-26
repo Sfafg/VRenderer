@@ -3,25 +3,9 @@
 #include <cassert>
 #include <vector>
 
-/**
- * @brief Enumerator specyfing how frequently data is updated, it is used when deciding what data to copy from swap to
- * swap.
- */
-enum class NextUpdate {
-    None = 0,
-    NextFrame,
-};
-
 enum class BufferChange { None = 0, Contents, Size };
 
 class RenderBuffer {
-    // TODO: Umożliwić usuwanie dowolnej części regionu poprzez erase, które zmniejsza rozmiar regionu. ZROBIONE
-    // (prawie?)
-    // TODO: Automatyczne updatowanie descriptorów.
-    // TODO: Reallocate nie zmienia indeksu regionu więc powinien zwracać void.
-    // TODO: Zrobić bufferChangeFlag na każdy rendering buffer, i zrobić copy range czyli zakres który musi zostać
-    // skopiowany.
-
   private:
     std::vector<uint32_t> sizes;
     std::vector<uint32_t> alignments;
@@ -29,13 +13,13 @@ class RenderBuffer {
 
     uint32_t size;
     vg::Flags<vg::BufferUsage> bufferUsage;
-    vg::Buffer renderingBuffer[2];
+    std::vector<vg::Buffer> renderingBuffers;
     vg::Buffer stagingBuffer;
     vg::Flags<BufferChange> bufferChangeFlag;
 
   public:
     RenderBuffer();
-    RenderBuffer(vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capacity = 0);
+    RenderBuffer(uint maxFramesInFlight, vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capacity = 0);
     RenderBuffer(RenderBuffer &&) = default;
     RenderBuffer &operator=(RenderBuffer &&) = default;
     RenderBuffer(const RenderBuffer &) = delete;

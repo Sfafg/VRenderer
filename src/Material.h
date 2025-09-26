@@ -7,14 +7,10 @@
  * @brief Class used to represent a material used for rendering.
  */
 class Material {
+  public:
     friend class Renderer;
     friend class RenderObject;
     friend class Batch;
-
-    static std::vector<vg::Subpass> subpasses;
-    static std::vector<vg::SubpassDependency> dependecies;
-    static std::vector<Material *> materials;
-    static RenderBuffer materialBuffer;
 
     uint16_t index;
     uint16_t variant;
@@ -56,7 +52,6 @@ class Material {
         };
     };
 
-  public:
     Material(Material *parentMaterial, const void *materialData = nullptr, int byteSize = 0);
 
     Material(
@@ -103,6 +98,7 @@ class Material {
     void Read(void *data, uint32_t readSize, uint32_t offset = 0);
     template <typename T> T Write(uint32_t offset = 0);
 };
+
 template <typename T>
 Material::Material(
     const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,

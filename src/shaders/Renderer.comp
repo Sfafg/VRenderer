@@ -13,10 +13,14 @@ layout(push_constant) uniform PushConstants {
 };
 
 layout(std140, binding = 0) uniform PassData {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProjection;
+    mat4 cameraViewProjection;
+    mat4 lightViewProjection;
     vec3 cameraPosition;
+    float padding1;
+    vec3 lightDirection;
+    float padding2;
+    vec3 lightColor;
+    float padding3;
 };
 
 layout(std430, binding = 2) buffer DrawCalls { DrawCall drawCalls[]; };

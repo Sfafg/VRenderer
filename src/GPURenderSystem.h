@@ -1,20 +1,27 @@
 #pragma once
 #include "VG/VG.h"
+#include <memory>
 
 class GPURenderSystem {
-    static vg::ComputePipeline gpuRenderer;
-    static vg::ComputePipeline clearDrawInstructions;
-    static vg::DescriptorPool descriptorPool;
-    static std::vector<vg::DescriptorSet> clearDescriptors;
-    static std::vector<vg::DescriptorSet> rendererDescriptors;
+    std::shared_ptr<vg::ComputePipeline> gpuRenderer;
+    std::shared_ptr<vg::ComputePipeline> clearDrawInstructions;
+    vg::DescriptorPool descriptorPool;
+    std::vector<vg::DescriptorSet> clearDescriptors;
+    std::vector<vg::DescriptorSet> rendererDescriptors;
 
   public:
-    static void Init(int framesInFlight);
+    GPURenderSystem();
+    GPURenderSystem(uint framesInFlight);
+    GPURenderSystem(GPURenderSystem &&) = default;
+    GPURenderSystem(const GPURenderSystem &) = delete;
+    GPURenderSystem &operator=(GPURenderSystem &&) = default;
+    GPURenderSystem &operator=(const GPURenderSystem &) = delete;
+    ~GPURenderSystem() = default;
 
-    static void AttachBuffers(
+    void AttachBuffers(
         int frameIndex, const vg::Buffer &passBuffer, const vg::Buffer &meshMetaData, const vg::Buffer &objectData,
         const vg::Buffer &drawInstructions, const vg::Buffer &instanceMapping
     );
 
-    static void RecordCommands(vg::CmdBuffer &cmdBuffer, int frameIndex);
+    void RecordCommands(vg::CmdBuffer &cmdBuffer, int frameIndex);
 };

@@ -6,53 +6,91 @@
 #include "Material.h"
 #include "Mesh.h"
 #include "RenderObject.h"
+#include "GPURenderSystem.h"
 #include "VG/VG.h"
 #include "QueryPool.h"
 #include <vector>
 
 class Renderer {
-    static void *window;
-    static vg::Surface surface;
-    static vg::Swapchain swapchain;
-    static vg::Image depthImage;
-    static vg::ImageView depthImageView;
-
-    static vg::QueryPool queryPool;
-    static std::vector<vg::Framebuffer> framebuffers;
-    static vg::DescriptorPool descriptorPool;
-    static std::vector<vg::DescriptorSet> descriptorSets;
-    static std::vector<vg::DescriptorSet> fullDescriptorSets;
-    static std::vector<vg::CmdBuffer> commandBuffer;
-    static std::vector<vg::Semaphore> renderFinishedSemaphore;
-    static std::vector<vg::Semaphore> imageAvailableSemaphore;
-    static std::vector<vg::Fence> inFlightFence;
-    static int frameIndex;
-    static int presentImageIndex;
-
-    static vg::RenderPass renderPass;
-    static vg::Buffer passBuffer;
-
-    friend Material;
-
-    static void RecreateRenderpass();
+    friend Batch;
+    friend RenderBuffer;
+    static constexpr uint MAX_FRAMES_IN_FLIGHT = 2;
 
   public:
     struct PassData {
-        glm::mat4 view;
-        glm::mat4 projection;
-        glm::mat4 viewProjection;
+        glm::mat4 cameraViewProjection;
+        glm::mat4 lightViewProjection;
         glm::vec3 cameraPosition;
+        float padding1;
+        glm::vec3 lightDirection;
+        float padding2;
+        glm::vec3 lightColor;
+        float padding3;
     };
 
-  public:
-    static void Init(void *window, const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height);
+    Renderer();
+    Renderer(const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height);
+    Renderer(const Renderer &o) = delete;
+    Renderer(Renderer &&o) = default;
+    Renderer &operator=(const Renderer &o) = delete;
+    Renderer &operator=(Renderer &&o) = default;
+    ~Renderer();
 
-    static void SetPassData(const PassData &data);
+    void SetPassData(const PassData &data);
 
-    static void RenderFrame();
-    static void Present(vg::Queue &queue);
+    void RenderFrame(const Renderer::PassData &data);
+    void Present(vg::Queue &queue);
 
-    static void Destroy();
+    // private:
+    vg::Surface surface;
+    vg::Swapchain swapchain;
+    vg::Image depthImage;
+    vg::ImageView depthImageView;
 
-    static bool IsInitialized();
+    vg::Image shadowImage;
+    vg::ImageView shadowImageView;
+    vg::Sampler shadowSampler;
+    vg::Framebuffer shadowFramebuffer;
+    vg::RenderPass shadowPass;
+
+    vg::RenderPass renderPass;
+    GPURenderSystem gpuRenderSystem;
+
+    vg::DescriptorPool descriptorPool;
+    std::vector<vg::DescriptorSet> descriptorSets;
+    std::vector<vg::Framebuffer> framebuffers;
+    std::vector<vg::CmdBuffer> commandBuffer;
+    std::vector<vg::Semaphore> renderFinishedSemaphore;
+    std::vector<vg::Semaphore> imageAvailableSemaphore;
+    std::vector<vg::Fence> inFlightFence;
+    int frameIndex;
+    int presentImageIndex;
+
+    friend Material;
+    RenderBuffer materialBuffer;
+    std::vector<vg::Subpass> subpasses;
+    std::vector<vg::SubpassDependency> dependecies;
+    std::vector<std::vector<Material *>> materials;
+    void RecreateRenderpass();
+
+    friend Mesh;
+    RenderBuffer vertexBuffer;
+    RenderBuffer indexBuffer;
+    RenderBuffer meshDataBuffer;
+    std::vector<Mesh *> meshes;
+
+    friend Batch;
+    friend RenderObject;
+    friend GPURenderSystem;
+    uint totalObjects;
+    std::vector<Batch> batches;
+    std::vector<std::tuple<uint16_t, uint16_t>> materialIndices;
+    std::vector<std::vector<RenderObject *>> renderObjects;
+    RenderBuffer instanceMappingBuffer;
+    RenderBuffer drawCallBuffer;
+    RenderBuffer objectBuffer;
+
+    vg::Buffer passBuffer;
 };
+
+extern Renderer *currentRenderer;

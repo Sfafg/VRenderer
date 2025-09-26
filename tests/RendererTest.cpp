@@ -23,7 +23,7 @@ float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (m
 vg::Queue generalQueue;
 vg::Device renderDevice;
 void InitVulkan() {
-    vg::instance = vg::Instance({}, [](vg::MessageSeverity severity, const char *message) {
+    vg::instance = new vg::Instance({}, [](vg::MessageSeverity severity, const char *message) {
         if (severity < vg::MessageSeverity::Warning) return;
         std::cout << message << '\n';
     });
@@ -122,20 +122,20 @@ void TestRenderBuffer() {
         std::memcmp(partialReadData.data(), partialData.data(), partialSize) == 0,
         "Wpisywanie częściowych danych nie działa"
     );
-    
+
     // Test 6: Realokacja z zachowaniem danych
     std::cout << "[TEST] Data BEFORE realloc:  ";
     for (int i = 0; i < random_size; i++) std::cout << (int)data[i] << " ";
     std::cout << std::endl;
 
-    uint32_t newSize = static_cast<uint32_t>(allocSize * 1.2);  // zwiększ rozmiar
+    uint32_t newSize = static_cast<uint32_t>(allocSize * 1.2); // zwiększ rozmiar
     rb.Reallocate(region, newSize);
 
     // Sprawdź czy dane zostały zachowane
     std::vector<uint8_t> reallocReadData(random_size);
     uint32_t readSizeAfterRealloc = rb.Read(region, reallocReadData.data(), random_size);
     printf("Read size after realloc: %u\n", readSizeAfterRealloc);
-    
+
     std::cout << "[TEST] Data after realloc:  ";
     for (int i = 0; i < random_size; i++) std::cout << (int)reallocReadData[i] << " ";
     std::cout << std::endl;
@@ -148,31 +148,31 @@ void TestRenderBuffer() {
     uint32_t region2 = rb.Allocate(100, 32);
     Check(rb.Offset(region2) % 32 == 0, "Drugi region nie jest poprawnie aligned");
     Check(rb.Offset(region2) >= rb.Offset(region) + rb.Size(region), "Drugi region nakłada się na pierwszy");
-    
+
     // Sprawdź padding między regionami
     uint32_t expectedPadding = rb.GetPadding(region2, rb.Offset(region) + rb.Size(region));
     uint32_t actualGap = rb.Offset(region2) - (rb.Offset(region) + rb.Size(region));
     Check(actualGap == expectedPadding, "Niepoprawny padding między regionami");
 
     printf("Region 1: offset=%u, size=%u, alignment= %u\n", rb.Offset(region), rb.Size(region), rb.Alignment(region));
-    printf("Region 2: offset=%u, size=%u, alignment= %u\n", rb.Offset(region2), rb.Size(region2), rb.Alignment(region2));
+    printf(
+        "Region 2: offset=%u, size=%u, alignment= %u\n", rb.Offset(region2), rb.Size(region2), rb.Alignment(region2)
+    );
     printf("Gap between regions: %u (expected padding: %u)\n", actualGap, expectedPadding);
 
     // Test 8: Erase z zachowaniem alignmentów
     std::vector<uint8_t> testData(50);
-    for (int i = 0; i < 50; i++) {
-        testData[i] = static_cast<uint8_t>(200 + i);
-    }
+    for (int i = 0; i < 50; i++) { testData[i] = static_cast<uint8_t>(200 + i); }
     rb.Write(region2, testData.data(), 50);
-    
+
     // Sprawdź dane przed Erase
     std::vector<uint8_t> beforeErase(50);
     rb.Read(region2, beforeErase.data(), 50);
     Check(std::memcmp(beforeErase.data(), testData.data(), 50) == 0, "Dane nie zostały zapisane przed Erase");
 
     // Usuń część danych z pierwszego regionu
-    rb.Erase(region, 100, 200);  // usuń 100 bajtów od pozycji 200
-    
+    rb.Erase(region, 100, 200); // usuń 100 bajtów od pozycji 200
+
     // Sprawdź czy drugi region wciąż ma poprawne dane i alignment
     std::vector<uint8_t> afterErase(50);
     rb.Read(region2, afterErase.data(), 50);
@@ -180,23 +180,29 @@ void TestRenderBuffer() {
     Check(rb.Offset(region2) % rb.Alignment(region2) == 0, "Erase naruszył alignment drugiego regionu");
     Check(rb.Size(region) == newSize - 100, "Erase nie zmniejszył rozmiaru regionu");
 
-    printf("After Erase - Region 1: offset=%u, size=%u, alignment= %u\n", rb.Offset(region), rb.Size(region), rb.Alignment(region));
-    printf("After Erase - Region 2: offset=%u, size=%u, alignment= %u\n", rb.Offset(region2), rb.Size(region2), rb.Alignment(region2));
+    printf(
+        "After Erase - Region 1: offset=%u, size=%u, alignment= %u\n", rb.Offset(region), rb.Size(region),
+        rb.Alignment(region)
+    );
+    printf(
+        "After Erase - Region 2: offset=%u, size=%u, alignment= %u\n", rb.Offset(region2), rb.Size(region2),
+        rb.Alignment(region2)
+    );
 
     // Test 9: Dealokacja ze sprawdzeniem paddingu
-    
+
     uint32_t region3 = rb.Allocate(64, 64);
     uint32_t oldOffset2 = rb.Offset(region2);
     uint32_t oldOffset3 = rb.Offset(region3);
-    
+
     printf("Before Deallocate - Region 2: offset=%u, Region 3: offset=%u\n", oldOffset2, oldOffset3);
-    
-    rb.Deallocate(region2);  // usuń środkowy region
+
+    rb.Deallocate(region2); // usuń środkowy region
 
     // po usunieciu region2, region3 powinien się przesunąć na miejsce region2, czyli 1
     Check(rb.Offset(region2) % rb.Alignment(region2) == 0, "Dealokacja naruszyla alignment pozostałego regionu");
     Check(rb.Offset(region2) < oldOffset3, "Region nie został przesunięty po dealokacji");
-    
+
     printf("After Deallocate - Region 3: offset=%u (was %u)\n", rb.Offset(region2), oldOffset3);
 
     // Test 10: Rezerwacja większej pojemności
@@ -204,7 +210,7 @@ void TestRenderBuffer() {
     int oldCapacity = rb.GetCapacity();
     rb.Reserve(biggerCapacity);
     Check(rb.GetCapacity() >= biggerCapacity, "Rezerwacja większej pojemności nie działa");
-    
+
     std::cout << "💗💗💗💗💗 All tests passed! 💗💗💗💗💗" << std::endl;
 }
 
@@ -212,4 +218,6 @@ int main() {
     InitVulkan();
     RenderBuffer renderBuffer(128, vg::BufferUsage::StorageBuffer);
     TestRenderBuffer();
+
+    delete vg::instance;
 }

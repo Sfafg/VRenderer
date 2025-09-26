@@ -16,198 +16,176 @@ int glfwCreateWindowSurface(VkInstance instance, GLFWwindow *window, const void 
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <math.h>
+#include "DebugRendering.h"
+#include "AssimpLoader.h"
 
 float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (max - min) + min; }
 
-GLFWwindow *CreateWindow() {
+struct RAIIGLFW {
+    RAIIGLFW();
+    ~RAIIGLFW();
+};
+
+GLFWwindow *CreateWindow();
+vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window);
+vg::Instance CreateInstance();
+vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue);
+glm::vec3 GetMoveDirection(GLFWwindow *window, float speed = 0.4f);
+glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed = 0.001f);
+
+int main() {
+    RAIIGLFW raiiGLFW;
+    auto window = CreateWindow();
+    int w, h;
+    glfwGetFramebufferSize(window, &w, &h);
+
+    auto instance = CreateInstance();
+    vg::instance = &instance;
+    auto windowSurface = CreateWindowSurface(window);
+    auto generalQueue = vg::Queue({vg::QueueType::General}, 1.0f);
+    auto renderDevice = CreateDevice(windowSurface, generalQueue);
+    vg::currentDevice = &renderDevice;
+
+    Renderer renderer(&generalQueue, windowSurface, w, h);
+    currentRenderer = &renderer;
+
+    Material material(
+        "resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv",
+        vg::VertexLayout(
+            {{0, sizeof(float) * 6}, {1, sizeof(Batch::InstanceMapping), vg::InputRate::Instance}},
+            {{0, 0, vg::Format::RGB32SFLOAT},
+             {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
+             {2, 1, vg::Format::R32UINT},
+             {3, 1, vg::Format::R32UINT, offsetof(Batch::InstanceMapping, batchIndex)}}
+        ),
+        {.cullMode = vg::CullMode::Back},
+        vg::SubpassDependency(
+            -1, 0, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
+            vg::Access::ColorAttachmentWrite, {}
+        ),
+        std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f))
+    );
+    Debug::Init();
+
+    std::vector<Material> materials;
+    std::vector<Mesh> meshes;
+    std::vector<RenderObject> renderObjects;
+    Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
+
+    glm::vec3 cameraPos(0, -7, 0);
+    glm::quat cameraRotation(1, 0, 0, 0);
+    glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, 0.01f, 1000.0f);
+    proj[1][1] *= -1;
+
+    glm::mat4 lightProj = glm::ortho(-100.f, 140.f, -100.f, 100.f, -400.f, 400.f);
+    // lightProj[1][1] *= -1;
+    glm::mat4 lightView = glm::lookAt(glm::vec3(100), glm::vec3(0), glm::vec3(0, 0, 1));
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
+
+        cameraRotation = GetRotation(window, cameraRotation, 0.001f);
+        cameraPos += cameraRotation * GetMoveDirection(window, 0.9f);
+
+        glm::mat4 view = glm::lookAt(
+            cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
+        );
+
+        static float t = 0;
+        t += 0.01;
+        Debug::color = glm::vec4(1);
+        // Debug::DrawArrow(glm::vec3(100), glm::vec3(50));
+        Debug::DrawSphere(glm::vec3(2, 0, -sin(t) * 4 - 6), 1);
+        Debug::DrawSphere(cameraPos, 1);
+        Debug::DrawArrow(glm::vec3(0), glm::normalize(glm::vec3(1)));
+
+        Debug::color = glm::vec4(1, 0, 0, 1);
+        Debug::DrawArrow(glm::vec3(0), glm::vec3(1, 0, 0));
+        Debug::color = glm::vec4(0, 1, 0, 1);
+        Debug::DrawArrow(glm::vec3(0), glm::vec3(0, 1, 0));
+        Debug::color = glm::vec4(0, 0, 1, 1);
+        Debug::DrawArrow(glm::vec3(0), glm::vec3(0, 0, 1));
+
+        Debug::Frame();
+        renderer.RenderFrame(
+            {.cameraViewProjection = proj * view,
+             .lightViewProjection = lightProj * lightView,
+             .cameraPosition = cameraPos,
+             .lightDirection = glm::vec3(-1),
+             .lightColor = glm::vec3(1, 1, 1)}
+        );
+        renderer.Present(generalQueue);
+    }
+    Debug::Destroy();
+}
+
+RAIIGLFW::RAIIGLFW() {
 #ifndef NDEBUG
 #ifdef __linux__
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
 #endif
 #endif
     glfwInit();
+}
+
+RAIIGLFW::~RAIIGLFW() { glfwTerminate(); }
+
+GLFWwindow *CreateWindow() {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    // glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     return glfwCreateWindow(1920, 1080, "VRendererTest", nullptr, nullptr);
 }
 
-vg::Queue generalQueue;
-vg::Device renderDevice;
-vg::SurfaceHandle InitVulkan(GLFWwindow *window) {
+vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window) {
+    vg::SurfaceHandle windowSurface;
+    glfwCreateWindowSurface(*(VkInstance *)vg::instance, (GLFWwindow *)window, nullptr, (VkSurfaceKHR *)&windowSurface);
+    return windowSurface;
+}
+vg::Instance CreateInstance() {
     uint32_t glfwExtensionCount = 0;
     const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    vg::instance =
-        vg::Instance({glfwExtensions, glfwExtensionCount}, [](vg::MessageSeverity severity, const char *message) {
-            if (severity < vg::MessageSeverity::Warning) return;
-            std::cout << message << '\n' << '\n';
-        });
-
-    vg::SurfaceHandle windowSurface;
-    glfwCreateWindowSurface(
-        *(VkInstance *)&vg::instance, (GLFWwindow *)window, nullptr, (VkSurfaceKHR *)&windowSurface
-    );
+    return vg::Instance({glfwExtensions, glfwExtensionCount}, [](vg::MessageSeverity severity, const char *message) {
+        if (severity < vg::MessageSeverity::Warning) return;
+        std::cout << message << '\n' << '\n';
+    });
+}
+vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue) {
     vg::DeviceFeatures deviceFeatures(
         {vg::Feature::LogicOp, vg::Feature::SampleRateShading, vg::Feature::FillModeNonSolid,
          vg::Feature::MultiDrawIndirect}
     );
-    generalQueue = vg::Queue({vg::QueueType::General}, 1.0f);
-    renderDevice = vg::Device(
+    return vg::Device(
         {&generalQueue}, {"VK_KHR_swapchain"}, deviceFeatures, windowSurface,
         [](auto id, auto supportedQueues, auto supportedExtensions, auto type, vg::DeviceLimits limits,
            vg::DeviceFeatures features) { return (type == vg::DeviceType::Dedicated); }
     );
-    vg::currentDevice = &renderDevice;
-    return windowSurface;
+}
+glm::vec3 GetMoveDirection(GLFWwindow *window, float speed) {
+    glm::vec3 direction(0);
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) direction += glm::vec3(0, 0, 1);
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) direction += glm::vec3(0, 0, -1);
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) direction += glm::vec3(-1, 0, 0);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) direction += glm::vec3(1, 0, 0);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) direction += glm::vec3(0, -1, 0);
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
+
+    if (length(direction) > 0.0f) direction = normalize(direction);
+    return direction * speed;
 }
 
-int main() {
-    auto window = CreateWindow();
-    int w, h;
-    glfwGetFramebufferSize(window, &w, &h);
+glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed) {
+    static glm::dvec2 lastMouseP(-100, -100);
+    if (lastMouseP == glm::dvec2(-100, -100)) glfwGetCursorPos(window, &lastMouseP.x, &lastMouseP.y);
 
-    auto windowSurface = InitVulkan(window);
-
-    Material mat1(
-        "resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv",
-        vg::VertexLayout(
-            {{0, sizeof(float) * 2}, {1, sizeof(Batch::InstanceMapping), vg::InputRate::Instance}},
-            {{0, 0, vg::Format::RG32SFLOAT},
-             {1, 1, vg::Format::R32UINT},
-             {2, 1, vg::Format::R32UINT, offsetof(Batch::InstanceMapping, batchIndex)}}
-        ),
-        {.cullMode = vg::CullMode::None},
-        vg::SubpassDependency(
-            -1, 0, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
-            vg::Access::ColorAttachmentWrite, {}
-        ),
-        glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)
-    );
-    Material mat2(&mat1, glm::vec4(1.0f, 0.8f, 0.6f, 1.0f));
-    Material mat3(&mat1, glm::vec4(1.0f, 0.6f, 0.3f, 1.0f));
-    Material mat4(&mat1, glm::vec4(1.0f, 0.6f, 0.1f, 1.0f));
-    Material mat5(&mat1, glm::vec4(1.0f, 0.4f, 0.1f, 1.0f));
-    Material mat6(&mat1, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
-    Material mat1_1(
-        "resources/shaders/shader1.vert.spv", "resources/shaders/shader1.frag.spv",
-        vg::VertexLayout(
-            {{0, sizeof(float) * 5}, {1, sizeof(Batch::InstanceMapping), vg::InputRate::Instance}},
-            {{0, 0, vg::Format::RG32SFLOAT},
-             {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 2},
-             {2, 1, vg::Format::R32UINT},
-             {3, 1, vg::Format::R32UINT, offsetof(Batch::InstanceMapping, batchIndex)}}
-        ),
-        {.cullMode = vg::CullMode::None},
-        vg::SubpassDependency(
-            0, 1, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
-            vg::Access::ColorAttachmentWrite, {}
-        ),
-        glm::vec4(-0.5, 0.5, 0.1, 0.2)
-    );
-    Material mat1_2(&mat1_1, glm::vec4(0.5, 0.5, 0.1, 0.1));
-
-    Renderer::Init(window, &generalQueue, windowSurface, w, h);
-
-    Mesh testMesh(4, new glm::vec2[]{{0, 0}, {1, 0}, {1, 1}, {0, 1}}, 6, new int[]{0, 1, 2, 2, 3, 0});
-    Mesh testMesh1(4, new glm::vec2[]{{0, 0}, {0.5, 0}, {1, 1}, {0, 1}}, 6, new int[]{0, 1, 2, 2, 3, 0});
-    Mesh testMesh1_1(
-        4, sizeof(float) * 5, new float[]{-1, -1, 1, 1, 1, 0, -1, 1, 1, 0, 0, 0, 0, 1, 1, -1, 0, 1, 0, 1}, 6,
-        sizeof(int), new int[]{0, 1, 2, 2, 3, 0}
-    );
-
-    RenderObject::SetLOD(
-        &testMesh, &mat1, sizeof(glm::mat4),
-        {{&testMesh, &mat3}, {&testMesh, &mat4}, {&testMesh, &mat5}, {&testMesh, &mat6}}
-    );
-    // RenderObject::ShrinkToFit(&testMesh, &mat1);
-
-    const uint objectCount = 90'000;
-    const float spawnScale = 0.01;
-    std::vector<RenderObject> renderObjects(objectCount);
-    // RenderObject renderObjects[objectCount];
-    // RenderObject renderObjects2[objectCount];
-    RenderObject::Reserve(&testMesh, &mat1, objectCount, sizeof(glm::mat4));
-    for (int i = 0; i < objectCount; i++) {
-        glm::mat4 matrix = glm::translate(
-            glm::scale(glm::mat4(1), glm::vec3(0.08)) *
-                glm::rotate(glm::mat4(1), randf(0, 100), glm::vec3(randf(), randf(), randf())),
-            glm::vec3(randf(-30, 30), randf(-30, 30), randf(-30, 30)) * spawnScale
-        );
-        matrix = glm::scale(glm::mat4(1), glm::vec3(0.48)) *
-                 glm::translate(
-                     glm::mat4(1), glm::vec3((i % (int)sqrt(objectCount)) * 1.1, (i / sqrt(objectCount)) * 1.1, 0)
-                 );
-
-        renderObjects[i] = RenderObject(&testMesh, &mat1, matrix);
-        // renderObjects2[i] = RenderObject(&testMesh1, &mat2, matrix);
+    glm::dvec2 mouseP;
+    glfwGetCursorPos(window, &mouseP.x, &mouseP.y);
+    glm::dvec2 mouseDelta = mouseP - lastMouseP;
+    lastMouseP = mouseP;
+    mouseDelta *= speed;
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1)) {
+        cameraRotation = glm::angleAxis((float)-mouseDelta.x, cameraRotation * glm::vec3(0, 0, 1)) * cameraRotation;
+        cameraRotation = glm::angleAxis((float)-mouseDelta.y, cameraRotation * glm::vec3(1, 0, 0)) * cameraRotation;
+        cameraRotation = glm::normalize(cameraRotation);
     }
-    RenderObject renderObject1(&testMesh1_1, &mat1_1, 0.1f);
-    RenderObject renderObject2(&testMesh1_1, &mat1_2, 0.2f);
 
-    glm::dvec2 lastMouseP;
-    glfwGetCursorPos(window, &lastMouseP.x, &lastMouseP.y);
-    glm::vec3 cameraPos(100, 0, -5.1f);
-    glm::quat cameraRotation(1, 0, 0, 0);
-    glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, 0.01f, 100.0f);
-
-    float t = 0;
-    int n = 0;
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
-
-        {
-            glm::dvec2 mouseP;
-            glfwGetCursorPos(window, &mouseP.x, &mouseP.y);
-            glm::dvec2 mouseDelta = mouseP - lastMouseP;
-            lastMouseP = mouseP;
-            mouseDelta *= 0.001f;
-            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1)) {
-                cameraRotation =
-                    glm::angleAxis((float)-mouseDelta.x, cameraRotation * glm::vec3(0, 0, 1)) * cameraRotation;
-                cameraRotation =
-                    glm::angleAxis((float)mouseDelta.y, cameraRotation * glm::vec3(1, 0, 0)) * cameraRotation;
-                cameraRotation = glm::normalize(cameraRotation);
-            }
-
-            glm::vec3 direction(0.0f);
-
-            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) direction += glm::vec3(0, 0, -1);
-            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) direction += glm::vec3(0, 0, 1);
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) direction += glm::vec3(-1, 0, 0);
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) direction += glm::vec3(1, 0, 0);
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) direction += glm::vec3(0, -1, 0);
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
-
-            if (length(direction) > 0.0f) direction = normalize(direction);
-
-            cameraPos += cameraRotation * direction * 0.5f;
-        }
-
-        for (int i = 0; i < 50; i++) renderObjects.erase(renderObjects.begin() + (rand() % renderObjects.size()));
-        for (int i = 0; i < renderObjects.size() / 10; i++)
-            renderObjects[(n + i) % renderObjects.size()].SetData(
-                glm::translate(
-                    renderObjects[(n + i) % renderObjects.size()].ReadData<glm::mat4>(),
-                    glm::vec3(randf(-0.6, 0.6), randf(-0.6, 0.6), randf(-0.6, 0.6)) * 0.02f
-                )
-            );
-        n += renderObjects.size() / 10;
-
-        glm::mat4 view = glm::lookAt(
-            cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
-        );
-        t += 0.01;
-        Renderer::SetPassData({
-            .view = view,
-            .projection = proj,
-            .viewProjection = proj * view,
-            .cameraPosition = cameraPos,
-        });
-        Renderer::RenderFrame();
-        Renderer::Present(generalQueue);
-    }
-    Renderer::Destroy();
-    renderObjects.clear();
-    std::cout << "CLEARED\n";
-    glfwTerminate();
+    return cameraRotation;
 }

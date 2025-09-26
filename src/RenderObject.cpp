@@ -1,7 +1,7 @@
 #include "RenderObject.h"
 #include "Mesh.h"
 #include "Material.h"
-#include "Buffer.h"
+#include "Renderer.h"
 
 RenderObject::RenderObject(Mesh *mesh, Material *material, uint32_t objectByteSize, const void *data) {
     Batch::AddObject(this, mesh, material, objectByteSize);
@@ -10,20 +10,24 @@ RenderObject::RenderObject(Mesh *mesh, Material *material, uint32_t objectByteSi
 
 RenderObject::RenderObject() : batchIndex(-1U), objectDataIndex(0) {}
 
-RenderObject::RenderObject(RenderObject &&o) {
+RenderObject::RenderObject(RenderObject &&o) : RenderObject() {
+    assert(currentRenderer && "Current Renderer needs to be assigned!");
+    auto &renderer = *currentRenderer;
     std::swap(batchIndex, o.batchIndex);
     std::swap(objectDataIndex, o.objectDataIndex);
-    if (batchIndex != -1U) Batch::renderObjects[batchIndex][objectDataIndex] = this;
+    if (batchIndex != -1U) renderer.renderObjects[batchIndex][objectDataIndex] = this;
 }
 
 RenderObject &RenderObject::operator=(RenderObject &&o) {
     if (this == &o) return *this;
 
+    assert(currentRenderer && "Current Renderer needs to be assigned!");
+    auto &renderer = *currentRenderer;
     if (batchIndex != -1U && o.batchIndex != -1U) {
         std::swap(
-            Batch::renderObjects[batchIndex][objectDataIndex], Batch::renderObjects[o.batchIndex][o.objectDataIndex]
+            renderer.renderObjects[batchIndex][objectDataIndex], renderer.renderObjects[o.batchIndex][o.objectDataIndex]
         );
-    } else if (o.batchIndex != -1U) Batch::renderObjects[o.batchIndex][o.objectDataIndex] = this;
+    } else if (o.batchIndex != -1U) renderer.renderObjects[o.batchIndex][o.objectDataIndex] = this;
 
     std::swap(batchIndex, o.batchIndex);
     std::swap(objectDataIndex, o.objectDataIndex);
@@ -38,13 +42,19 @@ RenderObject::~RenderObject() {
 }
 
 void RenderObject::SetData(const void *data, uint32_t byteSize) {
-    Batch::objectBuffer.Write(batchIndex, data, byteSize, Batch::objectBuffer.Alignment(batchIndex) * objectDataIndex);
+    assert(currentRenderer && "Current Renderer needs to be assigned!");
+    auto &renderer = *currentRenderer;
+    renderer.objectBuffer.Write(
+        batchIndex, data, byteSize, renderer.objectBuffer.Alignment(batchIndex) * objectDataIndex
+    );
 }
 
 void RenderObject::ReadData(void *data) {
-    Batch::objectBuffer.Read(
-        batchIndex, data, Batch::objectBuffer.Alignment(batchIndex),
-        Batch::objectBuffer.Alignment(batchIndex) * objectDataIndex
+    assert(currentRenderer && "Current Renderer needs to be assigned!");
+    auto &renderer = *currentRenderer;
+    renderer.objectBuffer.Read(
+        batchIndex, data, renderer.objectBuffer.Alignment(batchIndex),
+        renderer.objectBuffer.Alignment(batchIndex) * objectDataIndex
     );
 }
 

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.30.1)
 project(VRenderer)
 set(CMAKE_CXX_STANDARD 23)
 
-option(VRENDERER_BUILD_TESTS "Build tests" TRUE)
+option(VRENDERER_BUILD_TESTS "Build tests" ON)
 
 set(TESTS_ROOT "${PROJECT_SOURCE_DIR}/tests")
 set(SRC_ROOT "${PROJECT_SOURCE_DIR}/src")
@@ -34,6 +34,8 @@ FetchContent_MakeAvailable(glm)
 
 file(GLOB_RECURSE SRC "${SRC_ROOT}/*.cpp")
 file(GLOB_RECURSE HEADER "${SRC_ROOT}/*.h")
+list(REMOVE_ITEM SRC "${SRC_ROOT}/DebugRendering.cpp")
+list(REMOVE_ITEM HEADER "${SRC_ROOT}/DebugRendering.h")
 
 add_library(VRenderer STATIC)
 target_link_libraries(VRenderer PUBLIC VGraphics glm)
@@ -65,7 +67,7 @@ if(VRENDERER_BUILD_TESTS)
         string(REPLACE "${SHADER_ROOT}/" "" SHADER_NAME "${SHADER}")
         add_custom_command(
             OUTPUT "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
-            COMMAND "${GLSLC_EXECUTABLE}" -O -Werror "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
+            COMMAND "${GLSLC_EXECUTABLE}" -Werror "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
             DEPENDS "${SHADER}" "${SHADER_DEPEND}"
             COMMENT "Compiling Shader: ${SHADER_NAME}.spv"
         )
@@ -110,9 +112,16 @@ if(VRENDERER_BUILD_TESTS)
     # )
     # FetchContent_MakeAvailable(tracy)
 
+    FetchContent_Declare(
+      assimp
+      GIT_REPOSITORY https://github.com/assimp/assimp.git
+      GIT_TAG master
+    )
+    FetchContent_MakeAvailable(assimp)
+
 # VRenderer
-    add_executable(Renderer ${TESTS_ROOT}/Source.cpp)
-    target_link_libraries(Renderer PRIVATE VRenderer glfw glm )#TracyClient
+    add_executable(Renderer ${TESTS_ROOT}/Source.cpp "${SRC_ROOT}/DebugRendering.cpp")
+    target_link_libraries(Renderer PRIVATE VRenderer glfw glm assimp )#TracyClient
     add_dependencies(Renderer Shaders Resources)
 
 # RendererTest
