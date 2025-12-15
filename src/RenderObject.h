@@ -7,15 +7,19 @@
 
 class RenderObject {
     friend class Renderer;
-    friend class Batch;
+    friend class BatchManager;
     friend class GPURenderSystem;
 
     uint32_t batchIndex;
     uint32_t objectDataIndex;
 
   public:
-    RenderObject(class Mesh *mesh, class Material *material, uint32_t objectByteSize = 0, const void *data = nullptr);
-    template <typename T> RenderObject(class Mesh *mesh, class Material *material, const T &batchData);
+    RenderObject(
+        class Mesh *mesh, class Material *material, uint32_t objectByteSize = 0, const void *data = nullptr,
+        bool debugObject = false
+    );
+    template <typename T>
+    RenderObject(class Mesh *mesh, class Material *material, const T &batchData, bool debugObject = false);
 
     RenderObject();
     RenderObject(RenderObject &&);
@@ -39,8 +43,8 @@ class RenderObject {
 };
 
 template <typename T>
-RenderObject::RenderObject(class Mesh *mesh, class Material *material, const T &batchData)
-    : RenderObject(mesh, material, sizeof(T), &batchData) {}
+RenderObject::RenderObject(class Mesh *mesh, class Material *material, const T &batchData, bool debugObject)
+    : RenderObject(mesh, material, sizeof(T), &batchData, debugObject) {}
 
 template <typename T> void RenderObject::SetData(const T &data) { return SetData(&data, sizeof(T)); }
 

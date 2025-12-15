@@ -1,5 +1,8 @@
 #pragma once
 #include "VG/VG.h"
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
 #include <memory>
 
 class GPURenderSystem {
@@ -20,8 +23,8 @@ class GPURenderSystem {
 
     void AttachBuffers(
         int frameIndex, const vg::Buffer &passBuffer, const vg::Buffer &meshMetaData, const vg::Buffer &objectData,
-        const vg::Buffer &drawInstructions, const vg::Buffer &instanceMapping
+        const vg::Buffer &batchBuffer, const vg::Buffer &drawInstructions, const vg::Buffer &instanceMapping
     );
 
-    void RecordCommands(vg::CmdBuffer &cmdBuffer, int frameIndex);
+    void RecordCommands(vg::CmdBuffer &cmdBuffer, const glm::mat4 &cameraViewProjection, int frameIndex);
 };

@@ -1,19 +1,15 @@
 #version 450
-
-struct InstanceMapping {
-    uint objectDataIndex;
-    uint batchIndex;
-};
-
 #include "DrawCall.glsl"
 
 layout(push_constant) uniform PushConstants {
-    uint drawCount;
+    mat4 cameraViewProjection;
+    uint batchCount;
     uint objectCount;
+    uint firstTransparentDrawCall;
+    uint transparentDrawCallCount;
 };
 
 layout(std140, binding = 0) uniform PassData {
-    mat4 cameraViewProjection;
     mat4 lightViewProjection;
     vec3 cameraPosition;
     float padding1;
@@ -23,55 +19,65 @@ layout(std140, binding = 0) uniform PassData {
     float padding3;
 };
 
+layout(std430, binding = 1) buffer BatchInfos { BatchInfo batchInfo[]; };
+
 layout(std430, binding = 2) buffer DrawCalls { DrawCall drawCalls[]; };
 
-layout(std430, binding = 3) buffer InstanceMappings { InstanceMapping instanceMapping[]; };
+layout(std430, binding = 3) buffer InstanceMappings { uint instanceMapping[]; };
 
 layout(std430, binding = 4) buffer BatchDatas { float batchData[]; };
 
-uint GetLodCount(uint drawCall) { return drawCalls[drawCall].lodCountPointerParent >> 28 & 0xF; }
+BatchInfo GetBatchData(uint sourceObjectIndex) {
+    // // Binary search.
+    // uint l = 0;
+    // uint r = batchCount - 1;
+    // uint m = 0;
+    // while (l <= r) {
+    //     m = l + uint((r - l) * 0.5);
+    //     if (batchInfo[m].firstObjectIndex < sourceObjectIndex) l = m + 1;
+    //     else if (batchInfo[m].firstObjectIndex > sourceObjectIndex) r = m - 1;
+    //     else break;
+    // }
 
-uint GetLodIndex(uint drawCall) {
-    uint id = drawCalls[drawCall].lodCountPointerParent >> 14 & 0x3FFF;
-    if (id == 0x3FFF) return -1U;
-    return id;
-}
-uint GetParentIndex(uint drawCall) {
-    uint id = drawCalls[drawCall].lodCountPointerParent & 0x3FFF;
-    if (id == 0x3FFF) return -1U;
-    return id;
-}
+    for (int i = 0; i < batchCount; i++)
+        if (batchInfo[i].firstObjectIndex > sourceObjectIndex) return batchInfo[i - 1];
 
-uint GetDrawCallIndex(uint sourceObjectIndex, out uint objectID) {
-    uint runningSum = 0;
-    uint i = 0;
-    for (; i < drawCount; i++) {
-        runningSum += drawCalls[i].objectCount;
-        if (sourceObjectIndex < runningSum) break;
-    }
-    objectID = sourceObjectIndex - (runningSum - drawCalls[i].objectCount);
-    return i;
+    return batchInfo[batchCount - 1];
 }
 
 layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
 void main() {
-    uint sourceObjectIndex = gl_GlobalInvocationID.x;
-    if (sourceObjectIndex >= objectCount) return;
+    uint objectID = gl_GlobalInvocationID.x;
+    if (objectID >= objectCount) return;
 
-    uint objectID;
-    uint baseDrawCall = GetDrawCallIndex(sourceObjectIndex, objectID);
-    uint drawCall = baseDrawCall;
-    uint lodCount = GetLodCount(baseDrawCall);
-    if (lodCount != 0) {
-        uint dataIndex =
-            (drawCalls[baseDrawCall].firstObject + objectID) * drawCalls[baseDrawCall].objectDataElementSize / 4;
+    BatchInfo batch = GetBatchData(objectID);
+    uint drawCall = batch.drawCall;
+
+    // Lod selection.
+    if (batch.lods[0] != -1U) {
+        uint lodCount = 1 + uint(batch.lods[1] != -1U) + uint(batch.lods[2] != -1U) + uint(batch.lods[3] != -1U);
+
+        // TODO: Add dedicated buffer for transformation matrices and remove object data element size.
+        uint dataIndex = objectID * batch.objectDataElementSize / 4;
         vec3 objectPosition = vec3(batchData[dataIndex + 12], batchData[dataIndex + 13], batchData[dataIndex + 14]);
         float d = distance(objectPosition, cameraPosition) / 100;
         uint lodIndex = min(lodCount, uint(d * lodCount));
-        for (int i = 0; i < lodIndex; i++) drawCall = GetLodIndex(drawCall);
+        drawCall = batch.lods[lodIndex];
     }
 
-    uint targetObjectIndex = atomicAdd(drawCalls[drawCall].instanceCount, 1) + drawCalls[drawCall].firstInstance;
-    instanceMapping[targetObjectIndex].objectDataIndex = objectID;
-    instanceMapping[targetObjectIndex].batchIndex = drawCall;
+    // Visibility check.
+    bool isVisible = true;
+    if (!isVisible) return;
+
+    // Transparency sorting.
+    if (drawCall >= firstTransparentDrawCall) {
+        float farPlane = 1000;
+        float cameraDistance = 0;
+        uint bucketCount = 10;
+
+        uint bucketID = uint(ceil(sqrt(cameraDistance / farPlane) * bucketCount));
+        drawCall = bucketID * transparentDrawCallCount + (drawCall - firstTransparentDrawCall);
+    }
+    uint mappingID = atomicAdd(drawCalls[drawCall].instanceCount, 1) + drawCalls[drawCall].firstInstance;
+    instanceMapping[mappingID] = objectID - batch.firstObjectIndex + batch.objectDataOffset;
 }

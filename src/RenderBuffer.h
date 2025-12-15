@@ -61,7 +61,7 @@ class RenderBuffer {
     uint32_t Offset(uint32_t regionID) const;
     uint32_t GetPadding(uint32_t regionID, uint32_t offset) const;
 
-    bool FlushBuffer(int index);
+    bool FlushBuffer(int index, vg::cmd::CopyBuffer *copyInstruction = nullptr);
     vg::Buffer &GetBuffer(int index);
     const vg::Buffer &GetBuffer(int index) const;
 

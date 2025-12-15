@@ -1,7 +1,6 @@
 #version 450
 
 layout(set = 0, binding = 0) uniform PassData {
-    mat4 cameraViewProjection;
     mat4 lightViewProjection;
     vec3 cameraPosition;
     float padding1;
@@ -27,5 +26,6 @@ void main() {
     float fresnel = mix(0.8, 1.1, pow(f, 4));
 
     vec4 shaded = vec4(vec3(color) * diffuse * fresnel, color.a);
+    shaded.xyz = shaded.xyz / (shaded.xyz + 0.5);
     outColor = shaded;
 }

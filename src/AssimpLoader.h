@@ -9,7 +9,8 @@ enum class Attribute { Position, Normal, Color };
 
 inline std::vector<Mesh> Meshes(const std::string &path) {
     Assimp::Importer importer;
-    const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_ImproveCacheLocality);
+    const aiScene *scene =
+        importer.ReadFile(path, aiProcess_Triangulate | aiProcess_ImproveCacheLocality | aiProcess_GenBoundingBoxes);
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
         std::cout << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
         return {};
@@ -31,7 +32,9 @@ inline std::vector<Mesh> Meshes(const std::string &path) {
             indices.push_back(mesh.mFaces[j].mIndices[1]);
             indices.push_back(mesh.mFaces[j].mIndices[2]);
         }
-        meshes.emplace_back(Mesh(vertices.size(), vertices.data(), indices.size(), indices.data()));
+        glm::vec3 min(mesh.mAABB.mMin.x, mesh.mAABB.mMin.y, mesh.mAABB.mMin.z);
+        glm::vec3 max(mesh.mAABB.mMax.x, mesh.mAABB.mMax.y, mesh.mAABB.mMax.z);
+        meshes.emplace_back(Mesh(min, max, vertices.size(), vertices.data(), indices.size(), indices.data()));
     }
     return meshes;
 }
@@ -41,7 +44,8 @@ inline void Model(
     std::vector<Material> *materials, std::vector<Mesh> *meshes
 ) {
     Assimp::Importer importer;
-    const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_ImproveCacheLocality);
+    const aiScene *scene =
+        importer.ReadFile(path, aiProcess_Triangulate | aiProcess_ImproveCacheLocality | aiProcess_GenBoundingBoxes);
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
         std::cout << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
         return;
@@ -71,7 +75,9 @@ inline void Model(
             indices.push_back(mesh.mFaces[j].mIndices[1]);
             indices.push_back(mesh.mFaces[j].mIndices[2]);
         }
-        meshes->emplace_back(Mesh(vertices.size(), vertices.data(), indices.size(), indices.data()));
+        glm::vec3 min(mesh.mAABB.mMin.x, mesh.mAABB.mMin.y, mesh.mAABB.mMin.z);
+        glm::vec3 max(mesh.mAABB.mMax.x, mesh.mAABB.mMax.y, mesh.mAABB.mMax.z);
+        meshes->emplace_back(Mesh(min, max, vertices.size(), vertices.data(), indices.size(), indices.data()));
     }
 
     auto processNode = [&renderObjects, &meshes, &materials,

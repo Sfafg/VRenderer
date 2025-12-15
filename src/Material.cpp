@@ -3,37 +3,67 @@
 #include "Batch.h"
 #include <cassert>
 
-Material::Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize)
+MaterialManager::MaterialManager(int maxFramesInFlight) {
+    materialBuffer = RenderBuffer(maxFramesInFlight, vg::BufferUsage::StorageBuffer, 0);
+}
+
+MaterialManager::MaterialManager() {}
+
+MaterialManager::MaterialManager(MaterialManager &&o) : MaterialManager() {
+    std::swap(materialBuffer, o.materialBuffer);
+    std::swap(subpasses, o.subpasses);
+    std::swap(dependecies, o.dependecies);
+    std::swap(materials, o.materials);
+}
+
+MaterialManager &MaterialManager::operator=(MaterialManager &&o) {
+    if (this == &o) return *this;
+
+    std::swap(materialBuffer, o.materialBuffer);
+    std::swap(subpasses, o.subpasses);
+    std::swap(dependecies, o.dependecies);
+    std::swap(materials, o.materials);
+
+    return *this;
+}
+
+MaterialManager::~MaterialManager() {}
+
+Material::Material(
+    bool isTransparent, vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize
+)
     : variant(0) {
     assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &renderer = *currentRenderer;
+    auto &materialManager = *currentRenderer->managers.materialManager;
 
-    renderer.subpasses.emplace_back(std::move(subpass));
-    renderer.dependecies.emplace_back(std::move(dependecy));
+    materialManager.subpasses.emplace_back(std::move(subpass));
+    materialManager.dependecies.emplace_back(std::move(dependecy));
 
-    index = renderer.materialBuffer.Allocate(byteSize, byteSize);
-    if (materialData) renderer.materialBuffer.Write(index, materialData, byteSize);
-    renderer.materials.push_back({this});
-    renderer.RecreateRenderpass();
+    index = materialManager.materialBuffer.Allocate(byteSize, byteSize);
+    if (materialData) materialManager.materialBuffer.Write(index, materialData, byteSize);
+    materialManager.materials.push_back({this});
+    currentRenderer->RecreateRenderpass();
 }
 
 Material::Material(Material *material, const void *materialData, int byteSize) : index(material->index) {
     assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &renderer = *currentRenderer;
-    assert(byteSize == renderer.materialBuffer.Alignment(material->index));
+    auto &materialManager = *currentRenderer->managers.materialManager;
+    assert(byteSize == materialManager.materialBuffer.Alignment(material->index));
 
-    variant = renderer.materialBuffer.sizes[material->index] / byteSize;
-    renderer.materialBuffer.Reallocate(material->index, renderer.materialBuffer.sizes[material->index] + byteSize);
-    if (materialData) renderer.materialBuffer.Write(index, materialData, byteSize, variant * byteSize);
-    renderer.materials[index].push_back(this);
+    variant = materialManager.materialBuffer.sizes[material->index] / byteSize;
+    materialManager.materialBuffer.Reallocate(
+        material->index, materialManager.materialBuffer.sizes[material->index] + byteSize
+    );
+    if (materialData) materialManager.materialBuffer.Write(index, materialData, byteSize, variant * byteSize);
+    materialManager.materials[index].push_back(this);
 }
 
 Material::Material(
-    const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+    bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
     MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const void *materialData, int dataSize
 )
     : Material(
-          vertexShaderPath, fragmentShaderPath, std::move(vertexInput),
+          isTransparent, vertexShaderPath, fragmentShaderPath, std::move(vertexInput),
           vg::InputAssembly(createInfo.primitive, createInfo.primitiveRestart), std::move(createInfo.viewportState),
           vg::Rasterizer(
               createInfo.depthClamp, createInfo.discard, createInfo.polygonMode, createInfo.cullMode,
@@ -56,13 +86,14 @@ Material::Material(
       ) {}
 
 Material::Material(
-    const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+    bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
     vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
     vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
     const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
     uint32_t childrenCount, vg::SubpassDependency &&dependecy, const void *materialData, int dataSize
 )
     : Material(
+          isTransparent,
           vg::Subpass(
               vg::GraphicsPipeline(
                   0,
@@ -82,24 +113,24 @@ Material::Material() : index(-1), variant(0) {}
 
 Material::Material(Material &&o) : Material() {
     assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &renderer = *currentRenderer;
+    auto &materialManager = *currentRenderer->managers.materialManager;
 
     std::swap(index, o.index);
     std::swap(variant, o.variant);
-    if (index != (uint16_t)-1) renderer.materials[index][variant] = this;
-    if (o.index != (uint16_t)-1) renderer.materials[o.index][o.variant] = &o;
+    if (index != (uint16_t)-1) materialManager.materials[index][variant] = this;
+    if (o.index != (uint16_t)-1) materialManager.materials[o.index][o.variant] = &o;
 }
 
 Material &Material::operator=(Material &&o) {
     if (this == &o) return *this;
     assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &renderer = *currentRenderer;
+    auto &materialManager = *currentRenderer->managers.materialManager;
 
     std::swap(index, o.index);
     std::swap(variant, o.variant);
 
-    if (index != (uint16_t)-1) renderer.materials[index][variant] = this;
-    if (o.index != (uint16_t)-1) renderer.materials[o.index][o.variant] = &o;
+    if (index != (uint16_t)-1) materialManager.materials[index][variant] = this;
+    if (o.index != (uint16_t)-1) materialManager.materials[o.index][o.variant] = &o;
 
     return *this;
 }
@@ -107,43 +138,49 @@ Material &Material::operator=(Material &&o) {
 Material::~Material() {
     if (index == (uint16_t)-1) return;
     assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &renderer = *currentRenderer;
+    auto &materialManager = *currentRenderer->managers.materialManager;
+    auto &batchManager = *currentRenderer->managers.batchManager;
 
-    bool lastVariant = renderer.materialBuffer.Size(index) == renderer.materialBuffer.Alignment(index);
+    bool lastVariant = materialManager.materialBuffer.Size(index) == materialManager.materialBuffer.Alignment(index);
 
-    renderer.materials[index].erase(renderer.materials[index].begin() + variant);
+    materialManager.materials[index].erase(materialManager.materials[index].begin() + variant);
     if (lastVariant) {
-        renderer.materials.erase(renderer.materials.begin() + index);
-        Batch::NotifyMaterialDestroy(index);
-        renderer.materialBuffer.Deallocate(index);
-        renderer.subpasses.erase(renderer.subpasses.begin() + index);
-        renderer.dependecies.erase(renderer.dependecies.begin() + index);
-        for (int i = index; i < renderer.materials.size(); i++)
-            for (int j = 0; j < renderer.materials[i].size(); j++) renderer.materials[i][j]->index--;
+        materialManager.materials.erase(materialManager.materials.begin() + index);
 
-        renderer.RecreateRenderpass();
+        batchManager.NotifyMaterialDestroy(index);
+        materialManager.materialBuffer.Deallocate(index);
+        materialManager.subpasses.erase(materialManager.subpasses.begin() + index);
+        materialManager.dependecies.erase(materialManager.dependecies.begin() + index);
+        for (int i = index; i < materialManager.materials.size(); i++)
+            for (int j = 0; j < materialManager.materials[i].size(); j++) materialManager.materials[i][j]->index--;
+
+        currentRenderer->RecreateRenderpass();
     } else {
-        Batch::NotifyVariantDestroy(index, variant);
-        uint32_t variantSize = renderer.materialBuffer.Alignment(index);
+        batchManager.NotifyVariantDestroy(index, variant);
+        uint32_t variantSize = materialManager.materialBuffer.Alignment(index);
         uint32_t variantOffset = variant * variantSize;
-        renderer.materialBuffer.Erase(index, variantSize, variantOffset);
+        materialManager.materialBuffer.Erase(index, variantSize, variantOffset);
 
         // Zaktualizuj numery wariantów dla materiałów o wyższych wariantach
-        for (int j = 0; j < renderer.materials[index].size(); j++) renderer.materials[index][j]->index--;
+        for (int j = 0; j < materialManager.materials[index].size(); j++) materialManager.materials[index][j]->index--;
     }
     index = -1;
 }
 
 void Material::Write(const void *data, uint32_t dataSize, uint32_t offset) {
     assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &renderer = *currentRenderer;
+    auto &materialManager = *currentRenderer->managers.materialManager;
 
-    renderer.materialBuffer.Write(index, data, dataSize, offset + renderer.materialBuffer.Alignment(index) * variant);
+    materialManager.materialBuffer.Write(
+        index, data, dataSize, offset + materialManager.materialBuffer.Alignment(index) * variant
+    );
 }
 
 void Material::Read(void *data, uint32_t readSize, uint32_t offset) {
     assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &renderer = *currentRenderer;
+    auto &materialManager = *currentRenderer->managers.materialManager;
 
-    renderer.materialBuffer.Read(index, data, readSize, offset + renderer.materialBuffer.Alignment(index) * variant);
+    materialManager.materialBuffer.Read(
+        index, data, readSize, offset + materialManager.materialBuffer.Alignment(index) * variant
+    );
 }

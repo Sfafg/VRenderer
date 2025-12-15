@@ -16,7 +16,7 @@ RenderBuffer::RenderBuffer(uint maxFramesInFlight, vg::Flags<vg::BufferUsage> bu
 
 RenderBuffer::~RenderBuffer() {}
 
-bool RenderBuffer::FlushBuffer(int index) {
+bool RenderBuffer::FlushBuffer(int index, vg::cmd::CopyBuffer *copyInstruction) {
     assert(index < renderingBuffers.size());
 
     if (stagingBuffer.GetSize() != renderingBuffers[index].GetSize()) {
@@ -24,33 +24,43 @@ bool RenderBuffer::FlushBuffer(int index) {
         vg::Allocate(newBuffer, vg::MemoryProperty::DeviceLocal);
         std::swap(renderingBuffers[index], newBuffer);
 
-        vg::CmdBuffer(vg::currentDevice->GetQueue(0))
-            .Begin()
-            .Append(
-                vg::cmd::CopyBuffer(
-                    stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+        if (copyInstruction)
+            *copyInstruction = vg::cmd::CopyBuffer(
+                stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+            );
+        else
+            vg::CmdBuffer(vg::currentDevice->GetQueue(0))
+                .Begin()
+                .Append(
+                    vg::cmd::CopyBuffer(
+                        stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+                    )
                 )
-            )
-            .End()
-            .Submit()
-            .Await();
+                .End()
+                .Submit()
+                .Await();
 
         bufferChangeFlag = 0;
         return true;
     }
 
-    if (bufferChangeFlag.IsSet(BufferChange::Contents))
-        vg::CmdBuffer(vg::currentDevice->GetQueue(0))
-            .Begin()
-            .Append(
-                vg::cmd::CopyBuffer(
-                    stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+    if (bufferChangeFlag.IsSet(BufferChange::Contents)) {
+        if (copyInstruction)
+            *copyInstruction = vg::cmd::CopyBuffer(
+                stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+            );
+        else
+            vg::CmdBuffer(vg::currentDevice->GetQueue(0))
+                .Begin()
+                .Append(
+                    vg::cmd::CopyBuffer(
+                        stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
+                    )
                 )
-            )
-            .End()
-            .Submit()
-            .Await();
-
+                .End()
+                .Submit()
+                .Await();
+    }
     bufferChangeFlag = 0;
     return false;
 }

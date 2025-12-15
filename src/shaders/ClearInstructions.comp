@@ -1,12 +1,16 @@
 #version 450
+#include "DrawCall.glsl"
 
 struct MeshMetaData {
+    vec3 boundsMin;
+    float padding1;
+    vec3 boundsMax;
+    float padding2;
     uint indexCount;
     uint firstIndex;
     uint vertexOffset;
+    float padding3;
 };
-
-#include "DrawCall.glsl"
 
 layout(push_constant) uniform PushConstants { uint batchCount; };
 

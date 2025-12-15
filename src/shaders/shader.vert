@@ -1,8 +1,17 @@
-#version 450
+#version 460
 #include "DrawCall.glsl"
 
-layout(set = 0, binding = 0) uniform PassData {
+struct Material {
+    vec4 color;
+    float roughness;
+};
+
+layout(push_constant) uniform PushConstants {
     mat4 cameraViewProjection;
+    uint drawIdOffset;
+};
+
+layout(set = 0, binding = 0) uniform PassData {
     mat4 lightViewProjection;
     vec3 cameraPosition;
     float padding1;
@@ -12,10 +21,6 @@ layout(set = 0, binding = 0) uniform PassData {
     float padding3;
 };
 
-struct Material {
-    vec4 color;
-    float roughness;
-};
 layout(set = 0, binding = 1) readonly buffer MaterialData { Material materials[]; };
 
 layout(set = 0, binding = 2) readonly buffer ObjectData { mat4 objectData[]; };
@@ -25,7 +30,6 @@ layout(set = 0, binding = 3) readonly buffer DrawCalls { DrawCall drawCalls[]; }
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in uint objectIndex;
-layout(location = 3) in uint batchIndex;
 
 layout(location = 0) out vec4 color;
 layout(location = 1) out vec3 normal;
@@ -34,8 +38,9 @@ layout(location = 3) out vec4 fragLightPosition;
 layout(location = 4) out float roughness;
 
 void main() {
-    DrawCall drawCall = drawCalls[batchIndex];
-    mat4 model = objectData[objectIndex + drawCall.firstObject];
+    // DrawCall drawCall = drawCalls[gl_DrawID + drawIdOffset];
+    DrawCall drawCall = drawCalls[drawIdOffset];
+    mat4 model = objectData[objectIndex];
     Material material = materials[drawCall.materialIndex];
 
     gl_Position = cameraViewProjection * model * vec4(aPosition, 1);

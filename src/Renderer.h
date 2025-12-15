@@ -8,17 +8,20 @@
 #include "RenderObject.h"
 #include "GPURenderSystem.h"
 #include "VG/VG.h"
-#include "QueryPool.h"
 #include <vector>
 
 class Renderer {
-    friend Batch;
+    friend BatchManager;
     friend RenderBuffer;
-    static constexpr uint MAX_FRAMES_IN_FLIGHT = 2;
 
   public:
+    struct Managers {
+        MeshManager *meshManager;
+        MaterialManager *materialManager;
+        BatchManager *batchManager;
+    };
+
     struct PassData {
-        glm::mat4 cameraViewProjection;
         glm::mat4 lightViewProjection;
         glm::vec3 cameraPosition;
         float padding1;
@@ -29,7 +32,10 @@ class Renderer {
     };
 
     Renderer();
-    Renderer(const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height);
+    Renderer(
+        uint maxFramesInFlight, const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height,
+        const Managers &managers
+    );
     Renderer(const Renderer &o) = delete;
     Renderer(Renderer &&o) = default;
     Renderer &operator=(const Renderer &o) = delete;
@@ -38,10 +44,10 @@ class Renderer {
 
     void SetPassData(const PassData &data);
 
-    void RenderFrame(const Renderer::PassData &data);
-    void Present(vg::Queue &queue);
+    void RenderFrame(vg::Queue &queue, const glm::mat4 &cameraViewProjection, const Renderer::PassData &data);
 
     // private:
+    uint maxFramesInFlight;
     vg::Surface surface;
     vg::Swapchain swapchain;
     vg::Image depthImage;
@@ -64,33 +70,11 @@ class Renderer {
     std::vector<vg::Semaphore> imageAvailableSemaphore;
     std::vector<vg::Fence> inFlightFence;
     int frameIndex;
-    int presentImageIndex;
 
-    friend Material;
-    RenderBuffer materialBuffer;
-    std::vector<vg::Subpass> subpasses;
-    std::vector<vg::SubpassDependency> dependecies;
-    std::vector<std::vector<Material *>> materials;
     void RecreateRenderpass();
 
-    friend Mesh;
-    RenderBuffer vertexBuffer;
-    RenderBuffer indexBuffer;
-    RenderBuffer meshDataBuffer;
-    std::vector<Mesh *> meshes;
-
-    friend Batch;
-    friend RenderObject;
-    friend GPURenderSystem;
-    uint totalObjects;
-    std::vector<Batch> batches;
-    std::vector<std::tuple<uint16_t, uint16_t>> materialIndices;
-    std::vector<std::vector<RenderObject *>> renderObjects;
-    RenderBuffer instanceMappingBuffer;
-    RenderBuffer drawCallBuffer;
-    RenderBuffer objectBuffer;
-
     vg::Buffer passBuffer;
+    Managers managers;
 };
 
 extern Renderer *currentRenderer;

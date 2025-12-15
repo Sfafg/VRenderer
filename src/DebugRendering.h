@@ -17,6 +17,7 @@ class Debug {
     static void Init();
     static void Destroy();
 
+    static void DrawPlane(glm::vec3 point, glm::vec3 normal, glm::vec2 size, int frameDuration = 1);
     static void DrawSphere(glm::vec3 center, float radius, int frameDuration = 1);
     static void DrawWireSphere(glm::vec3 center, float radius, int frameDuration = 1);
     static void DrawCube(glm::vec3 center, glm::vec3 extends, int frameDuration = 1);

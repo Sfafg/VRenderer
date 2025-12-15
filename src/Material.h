@@ -1,7 +1,28 @@
 #pragma once
 #include "VG/VG.h"
-#include <iostream>
+#include <vector>
 #include "RenderBuffer.h"
+
+class MaterialManager {
+  public:
+    MaterialManager(int maxFramesInFlight);
+
+    MaterialManager();
+    MaterialManager(MaterialManager &&);
+    MaterialManager &operator=(MaterialManager &&);
+    MaterialManager(const MaterialManager &) = delete;
+    MaterialManager &operator=(const MaterialManager &) = delete;
+    ~MaterialManager();
+
+  private:
+    friend class Renderer;
+    friend class Material;
+    friend class BatchManager;
+    RenderBuffer materialBuffer;
+    std::vector<vg::Subpass> subpasses;
+    std::vector<vg::SubpassDependency> dependecies;
+    std::vector<std::vector<class Material *>> materials;
+};
 
 /**
  * @brief Class used to represent a material used for rendering.
@@ -15,7 +36,10 @@ class Material {
     uint16_t index;
     uint16_t variant;
 
-    Material(vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize);
+    Material(
+        bool isTransparent, vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData,
+        int byteSize
+    );
 
   public:
     struct MaterialCreateInfo {
@@ -55,32 +79,33 @@ class Material {
     Material(Material *parentMaterial, const void *materialData = nullptr, int byteSize = 0);
 
     Material(
-        const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
-        vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
-        vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
+        bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath,
+        vg::VertexLayout &&vertexInput, vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState,
+        vg::Rasterizer &&rasterizer, vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
         const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
         uint32_t childrenCount, vg::SubpassDependency &&dependency, const void *materialData = nullptr, int byteSize = 0
     );
 
     Material(
-        const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
-        MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const void *materialData = nullptr,
-        int byteSize = 0
+        bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath,
+        vg::VertexLayout &&vertexInput, MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency,
+        const void *materialData = nullptr, int byteSize = 0
     );
 
     template <typename T>
     Material(
-        const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
-        vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
-        vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
+        bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath,
+        vg::VertexLayout &&vertexInput, vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState,
+        vg::Rasterizer &&rasterizer, vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
         const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
         uint32_t childrenCount, vg::SubpassDependency &&dependency, const T &materialData
     );
 
     template <typename T>
     Material(
-        const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
-        MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const T &materialData
+        bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath,
+        vg::VertexLayout &&vertexInput, MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency,
+        const T &materialData
     );
 
     template <typename T> Material(Material *material, const T &materialData);
@@ -101,17 +126,17 @@ class Material {
 
 template <typename T>
 Material::Material(
-    const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+    bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
     MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const T &materialData
 )
     : Material(
-          vertexShaderPath, fragmentShaderPath, std::move(vertexInput), std::move(createInfo), std::move(dependency),
-          &materialData, sizeof(T)
+          isTransparent, vertexShaderPath, fragmentShaderPath, std::move(vertexInput), std::move(createInfo),
+          std::move(dependency), &materialData, sizeof(T)
       ) {}
 
 template <typename T>
 Material::Material(
-    const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
+    bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
     vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
     vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
     const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,

@@ -12,15 +12,14 @@ Mesh *GetMesh(const std::string &name);
 
 void Debug::Init() {
     material = Material(
-        "resources/shaders/debugShader.vert.spv", "resources/shaders/debugShader.frag.spv",
+        true, "resources/shaders/debugShader.vert.spv", "resources/shaders/debugShader.frag.spv",
         vg::VertexLayout(
-            {{0, sizeof(float) * 6}, {1, sizeof(Batch::InstanceMapping), vg::InputRate::Instance}},
+            {{0, sizeof(float) * 6}, {1, sizeof(uint), vg::InputRate::Instance}},
             {{0, 0, vg::Format::RGB32SFLOAT},
              {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
-             {2, 1, vg::Format::R32UINT},
-             {3, 1, vg::Format::R32UINT, offsetof(Batch::InstanceMapping, batchIndex)}}
+             {2, 1, vg::Format::R32UINT}}
         ),
-        {.cullMode = vg::CullMode::Back, .enableLogicOp = false},
+        {.cullMode = vg::CullMode::Back, .depthWriteEnable = false, .enableLogicOp = false},
         vg::SubpassDependency(
             0, 1, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
             vg::Access::ColorAttachmentWrite, {}
@@ -36,10 +35,17 @@ void Debug::Destroy() {
     meshNames.clear();
 }
 
+// void Debug::DrawPlane(glm::vec3 point, glm::vec3 normal, glm::vec2 size, int frameDuration) {
+//     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius));
+
+//     objects.emplace_back(RenderObject(GetMesh("Plane"), &material, std::make_tuple(color, matrix * mat), true));
+//     objectLifeTime.push_back(frameDuration);
+// }
+
 void Debug::DrawSphere(glm::vec3 center, float radius, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius));
 
-    objects.emplace_back(RenderObject(GetMesh("Sphere"), &material, std::make_tuple(color, matrix * mat)));
+    objects.emplace_back(RenderObject(GetMesh("Sphere"), &material, std::make_tuple(color, matrix * mat), true));
     objectLifeTime.push_back(frameDuration);
 }
 
@@ -48,7 +54,7 @@ void Debug::DrawSphere(glm::vec3 center, float radius, int frameDuration) {
 void Debug::DrawCube(glm::vec3 center, glm::vec3 extends, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), extends);
 
-    objects.emplace_back(RenderObject(GetMesh("Cube"), &material, std::make_tuple(color, matrix * mat)));
+    objects.emplace_back(RenderObject(GetMesh("Cube"), &material, std::make_tuple(color, matrix * mat), true));
     objectLifeTime.push_back(frameDuration);
 }
 // void Debug::DrawWireCube(glm::vec3 center, glm::vec3 extends, int frameDuration);
@@ -65,7 +71,7 @@ void Debug::DrawLine(glm::vec3 begin, glm::vec3 end, int frameDuration) {
              glm::toMat4(glm::rotation(glm::vec3(0, 0, 1), to)) *
              glm::scale(glm::mat4(1), glm::vec3(thickness, thickness, distance * 0.5f));
 
-    objects.emplace_back(RenderObject(GetMesh("Cylinder"), &material, std::make_tuple(color, matrix)));
+    objects.emplace_back(RenderObject(GetMesh("Cylinder"), &material, std::make_tuple(color, matrix), true));
     objectLifeTime.push_back(frameDuration);
 
     matrix = mat;
@@ -86,7 +92,7 @@ void Debug::DrawArrow(glm::vec3 begin, glm::vec3 end, int frameDuration) {
              glm::toMat4(glm::rotation(glm::vec3(0, 0, 1), to)) *
              glm::scale(glm::mat4(1), glm::vec3(arrowThickness, arrowThickness, arrowLength * 0.5));
 
-    objects.emplace_back(RenderObject(GetMesh("Cone"), &material, std::make_tuple(color, matrix * mat)));
+    objects.emplace_back(RenderObject(GetMesh("Cone"), &material, std::make_tuple(color, matrix * mat), true));
     objectLifeTime.push_back(frameDuration);
     distance -= arrowLength;
 
@@ -95,7 +101,7 @@ void Debug::DrawArrow(glm::vec3 begin, glm::vec3 end, int frameDuration) {
                  glm::toMat4(glm::rotation(glm::vec3(0, 0, 1), to)) *
                  glm::scale(glm::mat4(1), glm::vec3(thickness, thickness, distance * 0.5f));
 
-        objects.emplace_back(RenderObject(GetMesh("Cylinder"), &material, std::make_tuple(color, matrix)));
+        objects.emplace_back(RenderObject(GetMesh("Cylinder"), &material, std::make_tuple(color, matrix), true));
         objectLifeTime.push_back(frameDuration);
     }
 
@@ -105,14 +111,14 @@ void Debug::DrawArrow(glm::vec3 begin, glm::vec3 end, int frameDuration) {
 void Debug::DrawCylinder(glm::vec3 center, float radius, float height, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius, radius, height));
 
-    objects.emplace_back(RenderObject(GetMesh("Cylinder"), &material, std::make_tuple(color, matrix * mat)));
+    objects.emplace_back(RenderObject(GetMesh("Cylinder"), &material, std::make_tuple(color, matrix * mat), true));
     objectLifeTime.push_back(frameDuration);
 }
 void Debug::DrawCone(glm::vec3 center, float baseRadius, float height, int frameDuration) {
     glm::mat4 mat =
         glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(baseRadius, baseRadius, height));
 
-    objects.emplace_back(RenderObject(GetMesh("Cone"), &material, std::make_tuple(color, matrix * mat)));
+    objects.emplace_back(RenderObject(GetMesh("Cone"), &material, std::make_tuple(color, matrix * mat), true));
     objectLifeTime.push_back(frameDuration);
 }
 

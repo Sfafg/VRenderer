@@ -46,17 +46,22 @@ int main() {
     auto renderDevice = CreateDevice(windowSurface, generalQueue);
     vg::currentDevice = &renderDevice;
 
-    Renderer renderer(&generalQueue, windowSurface, w, h);
+    const uint maxFramesInFlight = 2;
+    MeshManager meshManager(maxFramesInFlight);
+    MaterialManager materialManager(maxFramesInFlight);
+    BatchManager batchManager(maxFramesInFlight);
+    Renderer renderer(
+        maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialManager, &batchManager}
+    );
     currentRenderer = &renderer;
 
     Material material(
-        "resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv",
+        false, "resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv",
         vg::VertexLayout(
-            {{0, sizeof(float) * 6}, {1, sizeof(Batch::InstanceMapping), vg::InputRate::Instance}},
+            {{0, sizeof(float) * 6}, {1, sizeof(uint), vg::InputRate::Instance}},
             {{0, 0, vg::Format::RGB32SFLOAT},
              {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
-             {2, 1, vg::Format::R32UINT},
-             {3, 1, vg::Format::R32UINT, offsetof(Batch::InstanceMapping, batchIndex)}}
+             {2, 1, vg::Format::R32UINT}}
         ),
         {.cullMode = vg::CullMode::Back},
         vg::SubpassDependency(
@@ -72,20 +77,19 @@ int main() {
     std::vector<RenderObject> renderObjects;
     Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
 
-    glm::vec3 cameraPos(0, -7, 0);
+    glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);
     glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, 0.01f, 1000.0f);
     proj[1][1] *= -1;
 
     glm::mat4 lightProj = glm::ortho(-100.f, 140.f, -100.f, 100.f, -400.f, 400.f);
-    // lightProj[1][1] *= -1;
     glm::mat4 lightView = glm::lookAt(glm::vec3(100), glm::vec3(0), glm::vec3(0, 0, 1));
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
 
         cameraRotation = GetRotation(window, cameraRotation, 0.001f);
-        cameraPos += cameraRotation * GetMoveDirection(window, 0.9f);
+        cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
 
         glm::mat4 view = glm::lookAt(
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
@@ -93,8 +97,16 @@ int main() {
 
         static float t = 0;
         t += 0.01;
+        Debug::color = glm::vec4(0, 0, 1, 0.5);
+        Debug::DrawSphere(glm::vec3(2, 4, 0), 1);
+
+        Debug::color = glm::vec4(0, 1, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(2, 2, 0), 1);
+
+        Debug::color = glm::vec4(1, 0, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(2, 0, 0), 1);
+
         Debug::color = glm::vec4(1);
-        // Debug::DrawArrow(glm::vec3(100), glm::vec3(50));
         Debug::DrawSphere(glm::vec3(2, 0, -sin(t) * 4 - 6), 1);
         Debug::DrawSphere(cameraPos, 1);
         Debug::DrawArrow(glm::vec3(0), glm::normalize(glm::vec3(1)));
@@ -108,15 +120,14 @@ int main() {
 
         Debug::Frame();
         renderer.RenderFrame(
-            {.cameraViewProjection = proj * view,
-             .lightViewProjection = lightProj * lightView,
+            generalQueue, proj * view,
+            {.lightViewProjection = lightProj * lightView,
              .cameraPosition = cameraPos,
              .lightDirection = glm::vec3(-1),
              .lightColor = glm::vec3(1, 1, 1)}
         );
-        renderer.Present(generalQueue);
     }
-    Debug::Destroy();
+    // Debug::Destroy();
 }
 
 RAIIGLFW::RAIIGLFW() {
@@ -146,6 +157,7 @@ vg::Instance CreateInstance() {
     return vg::Instance({glfwExtensions, glfwExtensionCount}, [](vg::MessageSeverity severity, const char *message) {
         if (severity < vg::MessageSeverity::Warning) return;
         std::cout << message << '\n' << '\n';
+        exit(0);
     });
 }
 vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue) {
@@ -180,8 +192,15 @@ glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed)
     glfwGetCursorPos(window, &mouseP.x, &mouseP.y);
     glm::dvec2 mouseDelta = mouseP - lastMouseP;
     lastMouseP = mouseP;
-    mouseDelta *= speed;
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1)) {
+    mouseDelta = glm::dvec2(0, 0);
+    if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) mouseDelta -= glm::dvec2(0, 1);
+    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) mouseDelta += glm::dvec2(0, 1);
+    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) mouseDelta -= glm::dvec2(1, 0);
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) mouseDelta += glm::dvec2(1, 0);
+    mouseDelta *= speed * 10;
+
+    // if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1))
+    {
         cameraRotation = glm::angleAxis((float)-mouseDelta.x, cameraRotation * glm::vec3(0, 0, 1)) * cameraRotation;
         cameraRotation = glm::angleAxis((float)-mouseDelta.y, cameraRotation * glm::vec3(1, 0, 0)) * cameraRotation;
         cameraRotation = glm::normalize(cameraRotation);
