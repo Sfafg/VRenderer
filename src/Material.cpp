@@ -2,6 +2,7 @@
 #include "Renderer.h"
 #include "Batch.h"
 #include <cassert>
+#include <iostream>
 
 MaterialManager::MaterialManager(int maxFramesInFlight) {
     materialBuffer = RenderBuffer(maxFramesInFlight, vg::BufferUsage::StorageBuffer, 0);
@@ -29,10 +30,11 @@ MaterialManager &MaterialManager::operator=(MaterialManager &&o) {
 
 MaterialManager::~MaterialManager() {}
 
-Material::Material(
-    bool isTransparent, vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, const void *materialData, int byteSize
-)
+Material::Material(bool isTransparent, vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, ByteView materialData)
     : variant(0) {
+    uint byteSize = materialData.Size();
+    const void *data = materialData.Ptr();
+
     assert(currentRenderer && "Current Renderer needs to be assigned!");
     auto &materialManager = *currentRenderer->managers.materialManager;
 
@@ -40,13 +42,16 @@ Material::Material(
     materialManager.dependecies.emplace_back(std::move(dependecy));
 
     index = materialManager.materialBuffer.Allocate(byteSize, byteSize);
-    if (materialData) materialManager.materialBuffer.Write(index, materialData, byteSize);
+    if (data) materialManager.materialBuffer.Write(index, data, byteSize);
     materialManager.materials.push_back({this});
     materialManager.isTransparent.push_back(isTransparent);
     currentRenderer->RecreateRenderpass();
 }
 
-Material::Material(Material *material, const void *materialData, int byteSize) : index(material->index) {
+Material::Material(Material *material, ByteView materialData) : index(material->index) {
+    uint byteSize = materialData.Size();
+    const void *data = materialData.Ptr();
+
     assert(currentRenderer && "Current Renderer needs to be assigned!");
     auto &materialManager = *currentRenderer->managers.materialManager;
     assert(byteSize == materialManager.materialBuffer.Alignment(material->index));
@@ -55,13 +60,13 @@ Material::Material(Material *material, const void *materialData, int byteSize) :
     materialManager.materialBuffer.Reallocate(
         material->index, materialManager.materialBuffer.sizes[material->index] + byteSize
     );
-    if (materialData) materialManager.materialBuffer.Write(index, materialData, byteSize, variant * byteSize);
+    if (data) materialManager.materialBuffer.Write(index, data, byteSize, variant * byteSize);
     materialManager.materials[index].push_back(this);
 }
 
 Material::Material(
     bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
-    MaterialCreateInfo &&createInfo, vg::SubpassDependency &&dependency, const void *materialData, int dataSize
+    CreateInfo &&createInfo, vg::SubpassDependency &&dependency, ByteView materialData
 )
     : Material(
           isTransparent, vertexShaderPath, fragmentShaderPath, std::move(vertexInput),
@@ -83,7 +88,7 @@ Material::Material(
           vg::ColorBlending(
               createInfo.enableLogicOp, createInfo.logicOp, createInfo.blendConsts, createInfo.attachments
           ),
-          createInfo.dynamicState, createInfo.colorAttachments, 0, std::move(dependency), materialData, dataSize
+          createInfo.dynamicState, createInfo.colorAttachments, 0, std::move(dependency), materialData
       ) {}
 
 Material::Material(
@@ -91,7 +96,7 @@ Material::Material(
     vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
     vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
     const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
-    uint32_t childrenCount, vg::SubpassDependency &&dependecy, const void *materialData, int dataSize
+    uint32_t childrenCount, vg::SubpassDependency &&dependecy, ByteView materialData
 )
     : Material(
           isTransparent,
@@ -107,7 +112,7 @@ Material::Material(
               ),
               {}, colorAttachments, {}, vg::AttachmentReference(1, vg::ImageLayout::DepthStencilAttachmentOptimal), {}
           ),
-          std::move(dependecy), materialData, dataSize
+          std::move(dependecy), materialData
       ) {}
 
 Material::Material() : index(-1), variant(0) {}
@@ -169,12 +174,13 @@ Material::~Material() {
     index = -1;
 }
 
-void Material::Write(const void *data, uint32_t dataSize, uint32_t offset) {
+void Material::Write(ByteView materialData, uint32_t offset) {
     assert(currentRenderer && "Current Renderer needs to be assigned!");
     auto &materialManager = *currentRenderer->managers.materialManager;
 
     materialManager.materialBuffer.Write(
-        index, data, dataSize, offset + materialManager.materialBuffer.Alignment(index) * variant
+        index, materialData.Ptr(), materialData.Size(),
+        offset + materialManager.materialBuffer.Alignment(index) * variant
     );
 }
 

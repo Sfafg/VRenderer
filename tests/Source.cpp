@@ -127,7 +127,7 @@ int main() {
              .lightColor = glm::vec3(1, 1, 1)}
         );
     }
-    // Debug::Destroy();
+    Debug::Destroy();
 }
 
 RAIIGLFW::RAIIGLFW() {

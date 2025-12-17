@@ -277,9 +277,9 @@ bool BatchManager::DrawCallExists(Mesh *mesh, Material *material) {
     uint index = it - drawCalls.begin();
 }
 
-int BatchManager::GetDrawCall(Mesh *mesh, Material *material);
-void BatchManager::InsertDrawCall(Mesh *mesh, Material *material);
-void BatchManager::DeleteDrawCall(uint id);
+// int BatchManager::GetDrawCall(Mesh *mesh, Material *material);
+// void BatchManager::InsertDrawCall(Mesh *mesh, Material *material);
+// void BatchManager::DeleteDrawCall(uint id);
 
 uint BatchManager::AddOrGetDrawCall(Mesh *mesh, Material *material) {
     assert(currentRenderer && "Current Renderer needs to be assigned!");
