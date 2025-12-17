@@ -61,7 +61,8 @@ uint BatchManager::GetObjectCount(uint batchIndex) {
 
 BatchManager::BatchManager() {}
 
-BatchManager::BatchManager(int maxFramesInFlight) {
+BatchManager::BatchManager(int maxFramesInFlight, uint transparencyBucketCount)
+    : transparencyBucketCount(transparencyBucketCount) {
     drawCallBuffer = RenderBuffer(maxFramesInFlight, {BufferUsage::StorageBuffer, BufferUsage::IndirectBuffer}, 0);
     instanceMappingBuffer = RenderBuffer(maxFramesInFlight, {BufferUsage::StorageBuffer, BufferUsage::VertexBuffer}, 0);
     batchBuffer = RenderBuffer(maxFramesInFlight, BufferUsage::StorageBuffer, 0);
@@ -69,6 +70,9 @@ BatchManager::BatchManager(int maxFramesInFlight) {
 }
 
 BatchManager::BatchManager(BatchManager &&o) : BatchManager() {
+    std::swap(transparencyBucketCount, o.transparencyBucketCount);
+    std::swap(firstTransparentDrawCall, o.firstTransparentDrawCall);
+    std::swap(transparentDrawCallsCount, o.transparentDrawCallsCount);
     std::swap(drawCalls, o.drawCalls);
     std::swap(drawCallMaterialIndices, o.drawCallMaterialIndices);
     std::swap(drawCallBuffer, o.drawCallBuffer);
@@ -83,6 +87,9 @@ BatchManager::BatchManager(BatchManager &&o) : BatchManager() {
 BatchManager &BatchManager::operator=(BatchManager &&o) {
     if (this == &o) return *this;
 
+    std::swap(transparencyBucketCount, o.transparencyBucketCount);
+    std::swap(firstTransparentDrawCall, o.firstTransparentDrawCall);
+    std::swap(transparentDrawCallsCount, o.transparentDrawCallsCount);
     std::swap(drawCalls, o.drawCalls);
     std::swap(drawCallMaterialIndices, o.drawCallMaterialIndices);
     std::swap(drawCallBuffer, o.drawCallBuffer);
@@ -262,6 +269,18 @@ bool BatchManager::DrawCall::operator<(const std::tuple<Material *, Mesh *> &o) 
     return meshIndex < std::get<Mesh *>(o)->index;
 }
 
+bool BatchManager::DrawCallExists(Mesh *mesh, Material *material) {
+    assert(currentRenderer && "Current Renderer needs to be assigned!");
+    std::tuple<Material *, Mesh *> key(material, mesh);
+    auto it = std::lower_bound(drawCalls.begin(), drawCalls.end(), key, [](auto &a, auto &b) { return a < b; });
+    bool exists = it != drawCalls.end() && key == *it;
+    uint index = it - drawCalls.begin();
+}
+
+int BatchManager::GetDrawCall(Mesh *mesh, Material *material);
+void BatchManager::InsertDrawCall(Mesh *mesh, Material *material);
+void BatchManager::DeleteDrawCall(uint id);
+
 uint BatchManager::AddOrGetDrawCall(Mesh *mesh, Material *material) {
     assert(currentRenderer && "Current Renderer needs to be assigned!");
     std::tuple<Material *, Mesh *> key(material, mesh);
@@ -315,6 +334,77 @@ uint BatchManager::AddOrGetDrawCall(Mesh *mesh, Material *material) {
     }
 
     return index;
+}
+
+uint BatchManager::AddOrGetTransparentDrawCall(Mesh *mesh, Material *material) {
+    assert(currentRenderer && "Current Renderer needs to be assigned!");
+    std::tuple<Material *, Mesh *> key(material, mesh);
+    std::span<DrawCall> transparentDrawCalls = {
+        drawCalls.begin() + firstTransparentDrawCall,
+        drawCalls.begin() + firstTransparentDrawCall + transparentDrawCallsCount
+    };
+
+    auto it = std::lower_bound(transparentDrawCalls.begin(), transparentDrawCalls.end(), key, [](auto &a, auto &b) {
+        return a < b;
+    });
+    bool exists = it != transparentDrawCalls.end() && key == *it;
+    uint transparentIndex = it - transparentDrawCalls.begin();
+
+    if (!exists) {
+        auto &materialBuffer = currentRenderer->managers.materialManager->materialBuffer;
+
+        drawCallBuffer.Reserve(drawCallBuffer.GetCapacity() + sizeof(DrawCall) * transparencyBucketCount);
+        for (int i = 0; i < transparencyBucketCount; i++) {
+            uint index = (i * transparentDrawCallsCount) + transparentIndex + firstTransparentDrawCall;
+            drawCallBuffer.Allocate(sizeof(DrawCall), sizeof(DrawCall), index);
+            instanceMappingBuffer.Allocate(0, sizeof(uint), index);
+
+            DrawCall drawCall;
+            drawCall.firstInstance = instanceMappingBuffer.Offset(index) / instanceMappingBuffer.Alignment(index);
+            drawCall.meshIndex = mesh->index;
+            drawCall.materialIndex = 0;
+            if (materialBuffer.Alignment(material->index) != 0)
+                drawCall.materialIndex =
+                    materialBuffer.Offset(material->index) / materialBuffer.Alignment(material->index) +
+                    material->variant;
+            drawCallBuffer.Write(index, drawCall);
+
+            drawCalls.emplace(drawCalls.begin() + index, std::move(drawCall));
+            drawCallMaterialIndices.insert(
+                drawCallMaterialIndices.begin() + index, {material->index, material->variant}
+            );
+
+            // Fix first instance.
+            for (int i = index + 1; i < drawCalls.size(); i++) {
+                drawCalls[i].firstInstance = instanceMappingBuffer.Offset(i) / instanceMappingBuffer.Alignment(i);
+                drawCallBuffer.Write(i, drawCalls[i].firstInstance, offsetof(DrawCall, firstInstance));
+            }
+        }
+
+        uint index = transparentIndex + firstTransparentDrawCall;
+
+        // Fix pointers.
+        for (int i = 0; i < batches.size(); i++) {
+            bool update = false;
+            if (batches[i].drawCall == -1U) continue;
+            if (batches[i].drawCall > index) {
+                batches[i].drawCall++;
+                update = true;
+            }
+
+            for (int j = 0; j < 4; j++) {
+                if (batches[i].lods[j] == -1U) break;
+                if (batches[i].lods[j] > index) {
+                    batches[i].lods[j]++;
+                    update = true;
+                }
+            }
+
+            if (update) batchBuffer.Write(i, batches[i]);
+        }
+    }
+
+    return transparentIndex + firstTransparentDrawCall;
 }
 
 void BatchManager::DeleteDrawCall(uint id) {

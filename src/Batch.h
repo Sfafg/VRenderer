@@ -21,7 +21,7 @@ class BatchManager {
     static uint GetObjectCapacity(uint batchIndex);
     static uint GetObjectCount(uint batchIndex);
 
-    BatchManager(int maxFramesInFlight);
+    BatchManager(int maxFramesInFlight, uint transparencyBucketCount);
 
     BatchManager();
     BatchManager(BatchManager &&);
@@ -61,11 +61,19 @@ class BatchManager {
     void _ReserveObjects(uint batchIndex, uint objectCount);
     void _ShrinkToFit(uint batchIndex);
 
+    uint AddTransparentBatch(Mesh *mesh, Material *material, uint objectByteSize);
+
     uint _GetObjectCapacity(uint batchIndex);
     uint _GetObjectCount(uint batchIndex);
 
-    uint AddOrGetDrawCall(Mesh *mesh, Material *material);
+  private:
+    bool DrawCallExists(Mesh *mesh, Material *material);
+    int GetDrawCall(Mesh *mesh, Material *material);
+    void InsertDrawCall(Mesh *mesh, Material *material);
     void DeleteDrawCall(uint id);
+
+    uint AddOrGetDrawCall(Mesh *mesh, Material *material);
+    uint AddOrGetTransparentDrawCall(Mesh *mesh, Material *material);
 
     friend RenderObject;
     void AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize);
@@ -78,6 +86,9 @@ class BatchManager {
     void NotifyMeshDestroy(uint index);
 
   private:
+    uint transparencyBucketCount = 0;
+    uint firstTransparentDrawCall = 0;
+    uint transparentDrawCallsCount = 0;
     std::vector<DrawCall> drawCalls;
     std::vector<std::tuple<uint, uint>> drawCallMaterialIndices;
     RenderBuffer drawCallBuffer;

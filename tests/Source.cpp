@@ -49,7 +49,7 @@ int main() {
     const uint maxFramesInFlight = 2;
     MeshManager meshManager(maxFramesInFlight);
     MaterialManager materialManager(maxFramesInFlight);
-    BatchManager batchManager(maxFramesInFlight);
+    BatchManager batchManager(maxFramesInFlight, 10);
     Renderer renderer(
         maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialManager, &batchManager}
     );

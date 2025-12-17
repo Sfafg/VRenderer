@@ -42,6 +42,7 @@ Material::Material(
     index = materialManager.materialBuffer.Allocate(byteSize, byteSize);
     if (materialData) materialManager.materialBuffer.Write(index, materialData, byteSize);
     materialManager.materials.push_back({this});
+    materialManager.isTransparent.push_back(isTransparent);
     currentRenderer->RecreateRenderpass();
 }
 
@@ -146,6 +147,7 @@ Material::~Material() {
     materialManager.materials[index].erase(materialManager.materials[index].begin() + variant);
     if (lastVariant) {
         materialManager.materials.erase(materialManager.materials.begin() + index);
+        materialManager.isTransparent.erase(materialManager.isTransparent.begin() + index);
 
         batchManager.NotifyMaterialDestroy(index);
         materialManager.materialBuffer.Deallocate(index);

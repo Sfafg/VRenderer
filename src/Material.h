@@ -21,6 +21,7 @@ class MaterialManager {
     RenderBuffer materialBuffer;
     std::vector<vg::Subpass> subpasses;
     std::vector<vg::SubpassDependency> dependecies;
+    std::vector<bool> isTransparent;
     std::vector<std::vector<class Material *>> materials;
 };
 
