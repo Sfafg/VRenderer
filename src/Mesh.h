@@ -3,16 +3,16 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-class MeshManager {
+class MeshArray {
   public:
-    MeshManager(int maxFramesInFlight);
+    MeshArray(int maxFramesInFlight);
 
-    MeshManager();
-    MeshManager(MeshManager &&);
-    MeshManager &operator=(MeshManager &&);
-    MeshManager(const MeshManager &) = delete;
-    MeshManager &operator=(const MeshManager &) = delete;
-    ~MeshManager();
+    MeshArray();
+    MeshArray(MeshArray &&);
+    MeshArray &operator=(MeshArray &&);
+    MeshArray(const MeshArray &) = delete;
+    MeshArray &operator=(const MeshArray &) = delete;
+    ~MeshArray();
 
   private:
     friend class Renderer;
@@ -26,7 +26,7 @@ class MeshManager {
 class Mesh {
     friend class Renderer;
     friend class RenderObject;
-    friend class BatchManager;
+    friend class BatchArray;
     friend class GPURenderSystem;
 
     struct MeshMetaData {
@@ -43,6 +43,8 @@ class Mesh {
     uint32_t index;
 
   public:
+    static MeshArray *meshArray;
+
     Mesh(
         glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, int vertexByteSize, void *vertexData, int indexCount,
         int indexByteSize, void *indexData

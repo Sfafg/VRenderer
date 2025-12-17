@@ -47,13 +47,14 @@ int main() {
     vg::currentDevice = &renderDevice;
 
     const uint maxFramesInFlight = 2;
-    MeshManager meshManager(maxFramesInFlight);
-    MaterialManager materialManager(maxFramesInFlight);
-    BatchManager batchManager(maxFramesInFlight, 10);
+    MeshArray meshManager(maxFramesInFlight);
+    MaterialArray materialArray(maxFramesInFlight);
+    BatchArray batchManager(maxFramesInFlight, 10);
     Renderer renderer(
-        maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialManager, &batchManager}
+        maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialArray, &batchManager}
     );
-    currentRenderer = &renderer;
+    Material::materialArray = &materialArray;
+    renderer.MakeCurrent();
 
     Material material(
         false, "resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv",

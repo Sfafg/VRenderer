@@ -11,14 +11,14 @@
 #include <vector>
 
 class Renderer {
-    friend BatchManager;
+    friend BatchArray;
     friend RenderBuffer;
 
   public:
-    struct Managers {
-        MeshManager *meshManager;
-        MaterialManager *materialManager;
-        BatchManager *batchManager;
+    struct DataArrays {
+        MeshArray *meshArray;
+        MaterialArray *materialArray;
+        BatchArray *batchArray;
     };
 
     struct PassData {
@@ -34,7 +34,7 @@ class Renderer {
     Renderer();
     Renderer(
         uint maxFramesInFlight, const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height,
-        const Managers &managers
+        const DataArrays &managers
     );
     Renderer(const Renderer &o) = delete;
     Renderer(Renderer &&o) = default;
@@ -42,8 +42,8 @@ class Renderer {
     Renderer &operator=(Renderer &&o) = default;
     ~Renderer();
 
+    void MakeCurrent();
     void SetPassData(const PassData &data);
-
     void RenderFrame(vg::Queue &queue, const glm::mat4 &cameraViewProjection, const Renderer::PassData &data);
 
     // private:
@@ -71,10 +71,9 @@ class Renderer {
     std::vector<vg::Fence> inFlightFence;
     int frameIndex;
 
-    void RecreateRenderpass();
+    static void RecreateRenderpass();
+    void _RecreateRenderpass();
 
     vg::Buffer passBuffer;
-    Managers managers;
+    DataArrays dataArrays;
 };
-
-extern Renderer *currentRenderer;

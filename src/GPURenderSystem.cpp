@@ -58,9 +58,7 @@ void GPURenderSystem::AttachBuffers(
 }
 
 void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, const glm::mat4 &cameraViewProjection, int frameIndex) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &renderer = *currentRenderer;
-    auto &batchManager = *currentRenderer->managers.batchManager;
+    assert(BatchArray::batchArray && "Current batchArray needs to be assigned!");
 
     cmdBuffer.Append(
         cmd::BindPipeline(*clearDrawInstructions),
@@ -68,9 +66,10 @@ void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, const glm::mat4 &
             clearDrawInstructions->GetPipelineLayout(), PipelineBindPoint::Compute, 0, {clearDescriptors[frameIndex]}
         ),
         cmd::PushConstants(
-            clearDrawInstructions->GetPipelineLayout(), ShaderStage::Compute, 0, (uint32_t)batchManager.batches.size()
+            clearDrawInstructions->GetPipelineLayout(), ShaderStage::Compute, 0,
+            (uint32_t)BatchArray::batchArray->batches.size()
         ),
-        cmd::Dispatch(std::ceil(batchManager.batches.size() / 16.0), 1, 1),
+        cmd::Dispatch(std::ceil(BatchArray::batchArray->batches.size() / 16.0), 1, 1),
         cmd::PipelineBarier(
             PipelineStage::ComputeShader, PipelineStage::ComputeShader, Dependency::ByRegion,
             {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
@@ -82,9 +81,10 @@ void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, const glm::mat4 &
         cmd::PushConstants(
             gpuRenderer->GetPipelineLayout(), ShaderStage::Compute, 0,
             std::make_tuple(
-                0, 0, batchManager.totalObjects, (uint32_t)batchManager.batches.size(), cameraViewProjection
+                0, 0, BatchArray::batchArray->totalObjects, (uint32_t)BatchArray::batchArray->batches.size(),
+                cameraViewProjection
             )
         ),
-        cmd::Dispatch(std::ceil(batchManager.totalObjects / 1024.0), 1, 1)
+        cmd::Dispatch(std::ceil(BatchArray::batchArray->totalObjects / 1024.0), 1, 1)
     );
 }

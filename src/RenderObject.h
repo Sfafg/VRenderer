@@ -7,7 +7,7 @@
 
 class RenderObject {
     friend class Renderer;
-    friend class BatchManager;
+    friend class BatchArray;
     friend class GPURenderSystem;
 
     uint32_t batchIndex;

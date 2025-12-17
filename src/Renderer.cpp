@@ -10,9 +10,9 @@ Renderer::Renderer() {}
 
 Renderer::Renderer(
     uint maxFramesInFlight, const vg::Queue *queue, vg::SurfaceHandle windowSurface, int width, int height,
-    const Managers &managers
+    const DataArrays &managers
 )
-    : maxFramesInFlight(maxFramesInFlight), frameIndex(0), managers(managers) {
+    : maxFramesInFlight(maxFramesInFlight), frameIndex(0), dataArrays(managers) {
     surface = Surface(windowSurface, {Format::BGRA8SRGB, ColorSpace::SRGBNL});
     swapchain = Swapchain(surface, maxFramesInFlight, width, height);
     depthImage = Image(
@@ -61,17 +61,24 @@ Renderer::Renderer(
 
 Renderer::~Renderer() {}
 
+void Renderer::MakeCurrent() {
+    Material::materialArray = dataArrays.materialArray;
+    Mesh::meshArray = dataArrays.meshArray;
+    BatchArray::batchArray = dataArrays.batchArray;
+    currentRenderer = this;
+}
+
 void Renderer::SetPassData(const PassData &data) {
     void *p = passBuffer.MapMemory();
     memcpy(p, &data, sizeof(data));
 }
 
 void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, const PassData &data) {
-    auto &bManager = *managers.batchManager;
-    auto &matManager = *managers.materialManager;
-    auto &meshManager = *managers.meshManager;
+    auto &bManager = *dataArrays.batchArray;
+    auto &materialManager = *dataArrays.materialArray;
+    auto &meshManager = *dataArrays.meshArray;
 
-    auto &materialBuffer = matManager.materialBuffer;
+    auto &materialBuffer = materialManager.materialBuffer;
     auto &vertexBuffer = meshManager.vertexBuffer;
     auto &indexBuffer = meshManager.indexBuffer;
     auto &meshDataBuffer = meshManager.meshDataBuffer;
@@ -177,14 +184,13 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
         commandBuffer[frameIndex].Append(
             cmd::PushConstants(shadowPass.GetPipelineLayouts()[0], ShaderStage::Vertex, sizeof(glm::mat4), i),
             cmd::DrawIndexedIndirect(
-                drawCallBuffer.GetBuffer(frameIndex), sizeof(BatchManager::DrawCall) * i, 1,
-                sizeof(BatchManager::DrawCall)
+                drawCallBuffer.GetBuffer(frameIndex), sizeof(BatchArray::DrawCall) * i, 1, sizeof(BatchArray::DrawCall)
             )
         );
     }
 
     // int batchMaterialOffset = 0;
-    // for (int i = 0; i < matManager.subpasses.size(); i++) {
+    // for (int i = 0; i < materialManager.subpasses.size(); i++) {
     //     if (i != 0) commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
 
     //     if (batchMaterialOffset >= bManager.batches.size() ||
@@ -260,14 +266,13 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
         commandBuffer[frameIndex].Append(
             cmd::PushConstants(renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, sizeof(glm::mat4), i),
             cmd::DrawIndexedIndirect(
-                drawCallBuffer.GetBuffer(frameIndex), sizeof(BatchManager::DrawCall) * i, 1,
-                sizeof(BatchManager::DrawCall)
+                drawCallBuffer.GetBuffer(frameIndex), sizeof(BatchArray::DrawCall) * i, 1, sizeof(BatchArray::DrawCall)
             )
         );
     }
 
     // batchMaterialOffset = 0;
-    // for (int i = 0; i < matManager.subpasses.size(); i++) {
+    // for (int i = 0; i < materialManager.subpasses.size(); i++) {
     //     if (i != 0) commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
 
     //     if (batchMaterialOffset >= bManager.batches.size() ||
@@ -302,9 +307,13 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
 }
 
 void Renderer::RecreateRenderpass() {
-    auto &matManager = *managers.materialManager;
+    assert(currentRenderer && "Current currentRenderer needs to be assigned!");
+    currentRenderer->_RecreateRenderpass();
+}
+void Renderer::_RecreateRenderpass() {
+    auto &materialManager = *dataArrays.materialArray;
 
-    if (matManager.subpasses.size() == 0 || swapchain.GetImageCount() == 0) return;
+    if (materialManager.subpasses.size() == 0 || swapchain.GetImageCount() == 0) return;
 
     vg::currentDevice->WaitUntilIdle();
     renderPass = RenderPass(
@@ -322,13 +331,13 @@ void Renderer::RecreateRenderpass() {
               )}},
             {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(uint)}}
         )),
-        matManager.subpasses, matManager.dependecies
+        materialManager.subpasses, materialManager.dependecies
     );
 
-    for (int i = 0; i < matManager.subpasses.size(); i++) {
-        matManager.subpasses[i].colorAttachments = {};
-        matManager.subpasses[i].depthStencilAttachment->index = 0;
-        matManager.subpasses[i].graphicsPipeline.shaders.pop_back();
+    for (int i = 0; i < materialManager.subpasses.size(); i++) {
+        materialManager.subpasses[i].colorAttachments = {};
+        materialManager.subpasses[i].depthStencilAttachment->index = 0;
+        materialManager.subpasses[i].graphicsPipeline.shaders.pop_back();
     }
     shadowPass = RenderPass(
         {Attachment(shadowImage.GetFormat(), ImageLayout::DepthStencilAttachmentOptimal)},
@@ -345,15 +354,16 @@ void Renderer::RecreateRenderpass() {
             {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(uint)}}
 
         )),
-        matManager.subpasses, matManager.dependecies
+        materialManager.subpasses, materialManager.dependecies
     );
-    for (int i = 0; i < matManager.subpasses.size(); i++) {
-        matManager.subpasses[i].colorAttachments = {
+    for (int i = 0; i < materialManager.subpasses.size(); i++) {
+        materialManager.subpasses[i].colorAttachments = {
             vg::AttachmentReference(0, vg::ImageLayout::ColorAttachmentOptimal)
         };
-        matManager.subpasses[i].depthStencilAttachment->index = 1;
-        matManager.subpasses[i].graphicsPipeline.shaders.resize(2);
-        matManager.subpasses[i].graphicsPipeline.shaders[1] = &matManager.subpasses[i].graphicsPipeline.shaders_[1];
+        materialManager.subpasses[i].depthStencilAttachment->index = 1;
+        materialManager.subpasses[i].graphicsPipeline.shaders.resize(2);
+        materialManager.subpasses[i].graphicsPipeline.shaders[1] =
+            &materialManager.subpasses[i].graphicsPipeline.shaders_[1];
     }
     // Create and allocate descriptor set layouts.
     std::vector<vg::DescriptorSetLayoutHandle> layouts(
@@ -370,9 +380,9 @@ void Renderer::RecreateRenderpass() {
 
     for (size_t i = 0; i < descriptorSets.size(); i++) {
         descriptorSets[i].AttachBuffer(DescriptorType::UniformBuffer, passBuffer, 0, -1, 0, 0);
-        if (matManager.materialBuffer.GetBuffer(i) != vg::BufferHandle())
+        if (materialManager.materialBuffer.GetBuffer(i) != vg::BufferHandle())
             descriptorSets[i].AttachBuffer(
-                DescriptorType::StorageBuffer, matManager.materialBuffer.GetBuffer(i), 0, -1, 1, 0
+                DescriptorType::StorageBuffer, materialManager.materialBuffer.GetBuffer(i), 0, -1, 1, 0
             );
 
         descriptorSets[i].AttachImage(

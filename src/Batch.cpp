@@ -5,63 +5,57 @@
 #include "Renderer.h"
 #include <algorithm>
 using namespace vg;
-bool BatchManager::Exists(Mesh *mesh, Material *material) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._Exists(mesh, material);
+
+BatchArray *BatchArray::batchArray = nullptr;
+
+bool BatchArray::Exists(Mesh *mesh, Material *material) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_Exists(mesh, material);
 }
 
-uint BatchManager::Add(Mesh *mesh, Material *material, uint objectByteSize) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._Add(mesh, material, objectByteSize);
+uint BatchArray::Add(Mesh *mesh, Material *material, uint objectByteSize) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_Add(mesh, material, objectByteSize);
 }
 
-uint BatchManager::Get(Mesh *mesh, Material *material) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._Get(mesh, material);
+uint BatchArray::Get(Mesh *mesh, Material *material) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_Get(mesh, material);
 }
 
-void BatchManager::Remove(uint batchIndex) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._Remove(batchIndex);
+void BatchArray::Remove(uint batchIndex) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_Remove(batchIndex);
 }
 
-void BatchManager::SetLOD(uint batchIndex, const std::vector<std::tuple<class Mesh *, class Material *>> &lods) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._SetLOD(batchIndex, lods);
+void BatchArray::SetLOD(uint batchIndex, const std::vector<std::tuple<class Mesh *, class Material *>> &lods) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_SetLOD(batchIndex, lods);
 }
 
-void BatchManager::ReserveObjects(uint batchIndex, uint objectCount) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._ReserveObjects(batchIndex, objectCount);
+void BatchArray::ReserveObjects(uint batchIndex, uint objectCount) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_ReserveObjects(batchIndex, objectCount);
 }
 
-void BatchManager::ShrinkToFit(uint batchIndex) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._ShrinkToFit(batchIndex);
+void BatchArray::ShrinkToFit(uint batchIndex) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_ShrinkToFit(batchIndex);
 }
 
-uint BatchManager::GetObjectCapacity(uint batchIndex) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._GetObjectCapacity(batchIndex);
+uint BatchArray::GetObjectCapacity(uint batchIndex) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_GetObjectCapacity(batchIndex);
 }
 
-uint BatchManager::GetObjectCount(uint batchIndex) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
-    return batchManager._GetObjectCount(batchIndex);
+uint BatchArray::GetObjectCount(uint batchIndex) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    return batchArray->_GetObjectCount(batchIndex);
 }
 
-BatchManager::BatchManager() {}
+BatchArray::BatchArray() {}
 
-BatchManager::BatchManager(int maxFramesInFlight, uint transparencyBucketCount)
+BatchArray::BatchArray(int maxFramesInFlight, uint transparencyBucketCount)
     : transparencyBucketCount(transparencyBucketCount) {
     drawCallBuffer = RenderBuffer(maxFramesInFlight, {BufferUsage::StorageBuffer, BufferUsage::IndirectBuffer}, 0);
     instanceMappingBuffer = RenderBuffer(maxFramesInFlight, {BufferUsage::StorageBuffer, BufferUsage::VertexBuffer}, 0);
@@ -69,7 +63,7 @@ BatchManager::BatchManager(int maxFramesInFlight, uint transparencyBucketCount)
     objectBuffer = RenderBuffer(maxFramesInFlight, BufferUsage::StorageBuffer, 0);
 }
 
-BatchManager::BatchManager(BatchManager &&o) : BatchManager() {
+BatchArray::BatchArray(BatchArray &&o) : BatchArray() {
     std::swap(transparencyBucketCount, o.transparencyBucketCount);
     std::swap(firstTransparentDrawCall, o.firstTransparentDrawCall);
     std::swap(transparentDrawCallsCount, o.transparentDrawCallsCount);
@@ -84,7 +78,7 @@ BatchManager::BatchManager(BatchManager &&o) : BatchManager() {
     std::swap(objectBuffer, o.objectBuffer);
 }
 
-BatchManager &BatchManager::operator=(BatchManager &&o) {
+BatchArray &BatchArray::operator=(BatchArray &&o) {
     if (this == &o) return *this;
 
     std::swap(transparencyBucketCount, o.transparencyBucketCount);
@@ -103,11 +97,11 @@ BatchManager &BatchManager::operator=(BatchManager &&o) {
     return *this;
 }
 
-BatchManager::~BatchManager() {}
+BatchArray::~BatchArray() {}
 
-bool BatchManager::_Exists(Mesh *mesh, Material *material) { return Get(mesh, material) != -1U; }
+bool BatchArray::_Exists(Mesh *mesh, Material *material) { return Get(mesh, material) != -1U; }
 
-uint BatchManager::_Add(Mesh *mesh, Material *material, uint objectByteSize) {
+uint BatchArray::_Add(Mesh *mesh, Material *material, uint objectByteSize) {
     uint index = AddOrGetDrawCall(mesh, material);
 
     // Create Batch.
@@ -128,7 +122,7 @@ uint BatchManager::_Add(Mesh *mesh, Material *material, uint objectByteSize) {
     return batches.size() - 1;
 }
 
-uint BatchManager::_Get(Mesh *mesh, Material *material) {
+uint BatchArray::_Get(Mesh *mesh, Material *material) {
     std::tuple<Material *, Mesh *> key(material, mesh);
     for (int i = 0; i < batches.size(); i++)
         if (drawCalls[batches[i].drawCall] == key) return i;
@@ -136,7 +130,7 @@ uint BatchManager::_Get(Mesh *mesh, Material *material) {
     return -1U;
 }
 
-void BatchManager::_Remove(uint index) {
+void BatchArray::_Remove(uint index) {
     assert(index < batches.size() && "Invalid BatchID.");
     auto &batch = batches[index];
 
@@ -182,7 +176,7 @@ void BatchManager::_Remove(uint index) {
     batches.erase(batches.begin() + index);
 }
 
-void BatchManager::_SetLOD(uint batchIndex, const std::vector<std::tuple<class Mesh *, class Material *>> &lods) {
+void BatchArray::_SetLOD(uint batchIndex, const std::vector<std::tuple<class Mesh *, class Material *>> &lods) {
     assert(batchIndex < batches.size() && "Invalid Batch ID.");
     assert(lods.size() < 4 && "LOD count has to be less than 4.");
     assert(batches[batchIndex].lods[0] == -1U && "LOD changing has to be implemented.");
@@ -195,7 +189,7 @@ void BatchManager::_SetLOD(uint batchIndex, const std::vector<std::tuple<class M
     }
 }
 
-void BatchManager::_ReserveObjects(uint index, uint objectCount) {
+void BatchArray::_ReserveObjects(uint index, uint objectCount) {
     assert(index < batches.size() && "Invalid Batch ID.");
     auto &batch = batches[index];
 
@@ -222,7 +216,7 @@ void BatchManager::_ReserveObjects(uint index, uint objectCount) {
     }
 }
 
-void BatchManager::_ShrinkToFit(uint index) {
+void BatchArray::_ShrinkToFit(uint index) {
     assert(index < batches.size() && "Invalid Batch ID.");
     uint objectCount = GetObjectCount(index);
     uint objectCapacity = GetObjectCapacity(index);
@@ -235,32 +229,30 @@ void BatchManager::_ShrinkToFit(uint index) {
     ReserveObjects(index, objectCount);
 }
 
-uint BatchManager::_GetObjectCapacity(uint index) {
+uint BatchArray::_GetObjectCapacity(uint index) {
     assert(index < batches.size() && "Invalid Batch ID.");
     return instanceMappingBuffer.Size(batches[index].drawCall) /
            instanceMappingBuffer.Alignment(batches[index].drawCall);
 }
 
-uint BatchManager::_GetObjectCount(uint index) {
+uint BatchArray::_GetObjectCount(uint index) {
     assert(index < batches.size() && "Invalid Batch ID.");
     return renderObjects[index].size();
 }
 
-bool BatchManager::DrawCall::operator==(const std::tuple<Material *, Mesh *> &o) const {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
+bool BatchArray::DrawCall::operator==(const std::tuple<Material *, Mesh *> &o) const {
+    assert(batchArray && "Current batchArray needs to be assigned!");
 
-    auto id = this - &batchManager.drawCalls[0];
-    auto [index, variant] = batchManager.drawCallMaterialIndices[id];
+    auto id = this - &batchArray->drawCalls[0];
+    auto [index, variant] = batchArray->drawCallMaterialIndices[id];
     return index == std::get<Material *>(o)->index && variant == std::get<Material *>(o)->variant &&
            meshIndex == std::get<Mesh *>(o)->index;
 }
-bool BatchManager::DrawCall::operator<(const std::tuple<Material *, Mesh *> &o) const {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &batchManager = *currentRenderer->managers.batchManager;
+bool BatchArray::DrawCall::operator<(const std::tuple<Material *, Mesh *> &o) const {
+    assert(batchArray && "Current batchArray needs to be assigned!");
 
-    auto id = this - &batchManager.drawCalls[0];
-    auto [index, variant] = batchManager.drawCallMaterialIndices[id];
+    auto id = this - &batchArray->drawCalls[0];
+    auto [index, variant] = batchArray->drawCallMaterialIndices[id];
     if (index < std::get<Material *>(o)->index) return true;
     if (index > std::get<Material *>(o)->index) return false;
 
@@ -269,28 +261,29 @@ bool BatchManager::DrawCall::operator<(const std::tuple<Material *, Mesh *> &o) 
     return meshIndex < std::get<Mesh *>(o)->index;
 }
 
-bool BatchManager::DrawCallExists(Mesh *mesh, Material *material) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
+bool BatchArray::DrawCallExists(Mesh *mesh, Material *material) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
     std::tuple<Material *, Mesh *> key(material, mesh);
     auto it = std::lower_bound(drawCalls.begin(), drawCalls.end(), key, [](auto &a, auto &b) { return a < b; });
     bool exists = it != drawCalls.end() && key == *it;
     uint index = it - drawCalls.begin();
+    return false;
 }
 
 // int BatchManager::GetDrawCall(Mesh *mesh, Material *material);
 // void BatchManager::InsertDrawCall(Mesh *mesh, Material *material);
 // void BatchManager::DeleteDrawCall(uint id);
 
-uint BatchManager::AddOrGetDrawCall(Mesh *mesh, Material *material) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
+uint BatchArray::AddOrGetDrawCall(Mesh *mesh, Material *material) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
+    assert(Material::materialArray && "Current materialArray array needs to be assigned!");
     std::tuple<Material *, Mesh *> key(material, mesh);
     auto it = std::lower_bound(drawCalls.begin(), drawCalls.end(), key, [](auto &a, auto &b) { return a < b; });
     bool exists = it != drawCalls.end() && key == *it;
     uint index = it - drawCalls.begin();
 
     if (!exists) {
-        auto &materialBuffer = currentRenderer->managers.materialManager->materialBuffer;
-
+        RenderBuffer &materialBuffer = Material::materialArray->materialBuffer;
         drawCallBuffer.Allocate(sizeof(DrawCall), sizeof(DrawCall), index);
         instanceMappingBuffer.Allocate(0, sizeof(uint), index);
 
@@ -336,8 +329,8 @@ uint BatchManager::AddOrGetDrawCall(Mesh *mesh, Material *material) {
     return index;
 }
 
-uint BatchManager::AddOrGetTransparentDrawCall(Mesh *mesh, Material *material) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
+uint BatchArray::AddOrGetTransparentDrawCall(Mesh *mesh, Material *material) {
+    assert(batchArray && "Current batchArray needs to be assigned!");
     std::tuple<Material *, Mesh *> key(material, mesh);
     std::span<DrawCall> transparentDrawCalls = {
         drawCalls.begin() + firstTransparentDrawCall,
@@ -351,7 +344,7 @@ uint BatchManager::AddOrGetTransparentDrawCall(Mesh *mesh, Material *material) {
     uint transparentIndex = it - transparentDrawCalls.begin();
 
     if (!exists) {
-        auto &materialBuffer = currentRenderer->managers.materialManager->materialBuffer;
+        auto &materialBuffer = Material::materialArray->materialBuffer;
 
         drawCallBuffer.Reserve(drawCallBuffer.GetCapacity() + sizeof(DrawCall) * transparencyBucketCount);
         for (int i = 0; i < transparencyBucketCount; i++) {
@@ -407,7 +400,7 @@ uint BatchManager::AddOrGetTransparentDrawCall(Mesh *mesh, Material *material) {
     return transparentIndex + firstTransparentDrawCall;
 }
 
-void BatchManager::DeleteDrawCall(uint id) {
+void BatchArray::DeleteDrawCall(uint id) {
     drawCallBuffer.Deallocate(id);
     instanceMappingBuffer.Deallocate(id);
 
@@ -440,7 +433,7 @@ void BatchManager::DeleteDrawCall(uint id) {
         drawCallBuffer.Write(i, drawCalls[i].firstInstance, offsetof(DrawCall, firstInstance));
     }
 }
-void BatchManager::AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize) {
+void BatchArray::AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize) {
     uint index = Get(mesh, material);
     if (index == -1U) index = Add(mesh, material, objectByteSize);
 
@@ -457,7 +450,7 @@ void BatchManager::AddObject(RenderObject *renderObject, Mesh *mesh, Material *m
     }
 }
 
-void BatchManager::RemoveObject(RenderObject *renderObject) {
+void BatchArray::RemoveObject(RenderObject *renderObject) {
     auto index = renderObject->batchIndex;
     auto dataIndex = renderObject->objectDataIndex;
 
@@ -484,9 +477,8 @@ void BatchManager::RemoveObject(RenderObject *renderObject) {
     if (renderObjects[index].size() == 0) Remove(index);
 }
 
-void BatchManager::NotifyMaterialDestroy(uint index) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &matManager = *currentRenderer->managers.materialManager;
+void BatchArray::NotifyMaterialDestroy(uint index) {
+    assert(Material::materialArray && "Current materialArray needs to be assigned!");
 
     for (auto &material : drawCallMaterialIndices) {
         auto &[matIndex, variant] = material;
@@ -494,17 +486,17 @@ void BatchManager::NotifyMaterialDestroy(uint index) {
         if (matIndex > index) {
             matIndex--;
             uint id = &material - &drawCallMaterialIndices[0];
-            drawCalls[id].materialIndex =
-                matManager.materialBuffer.Offset(matIndex) / matManager.materialBuffer.Alignment(matIndex) + variant;
+            drawCalls[id].materialIndex = Material::materialArray->materialBuffer.Offset(matIndex) /
+                                              Material::materialArray->materialBuffer.Alignment(matIndex) +
+                                          variant;
 
             drawCallBuffer.Write(id, drawCalls[id].materialIndex, offsetof(DrawCall, materialIndex));
         }
     }
 }
 
-void BatchManager::NotifyVariantDestroy(uint materialIndex, uint index) {
-    assert(currentRenderer && "Current Renderer needs to be assigned!");
-    auto &matManager = *currentRenderer->managers.materialManager;
+void BatchArray::NotifyVariantDestroy(uint materialIndex, uint index) {
+    assert(Material::materialArray && "Current batchArray needs to be assigned!");
 
     for (auto &material : drawCallMaterialIndices) {
         auto &[matIndex, variant] = material;
@@ -514,15 +506,16 @@ void BatchManager::NotifyVariantDestroy(uint materialIndex, uint index) {
         if (variant > index) {
             variant--;
             uint id = &material - &drawCallMaterialIndices[0];
-            drawCalls[id].materialIndex =
-                matManager.materialBuffer.Offset(matIndex) / matManager.materialBuffer.Alignment(matIndex) + variant;
+            drawCalls[id].materialIndex = Material::materialArray->materialBuffer.Offset(matIndex) /
+                                              Material::materialArray->materialBuffer.Alignment(matIndex) +
+                                          variant;
 
             drawCallBuffer.Write(id, drawCalls[id].materialIndex, offsetof(DrawCall, materialIndex));
         }
     }
 }
 
-void BatchManager::NotifyMeshDestroy(uint index) {
+void BatchArray::NotifyMeshDestroy(uint index) {
     for (auto &drawCall : drawCalls) {
         assert(drawCall.meshIndex != index && "Can not destroy mesh that is being used.");
 

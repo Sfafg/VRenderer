@@ -4,49 +4,27 @@
 #include "RenderBuffer.h"
 #include "ByteView.h"
 
-class MaterialManager {
+class MaterialArray {
   public:
-    MaterialManager(int maxFramesInFlight);
+    MaterialArray(int maxFramesInFlight);
 
-    MaterialManager();
-    MaterialManager(MaterialManager &&);
-    MaterialManager &operator=(MaterialManager &&);
-    MaterialManager(const MaterialManager &) = delete;
-    MaterialManager &operator=(const MaterialManager &) = delete;
-    ~MaterialManager();
+    MaterialArray();
+    MaterialArray(MaterialArray &&);
+    MaterialArray &operator=(MaterialArray &&);
+    MaterialArray(const MaterialArray &) = delete;
+    MaterialArray &operator=(const MaterialArray &) = delete;
+    ~MaterialArray();
 
   private:
     friend class Renderer;
     friend class Material;
-    friend class BatchManager;
+    friend class BatchArray;
     RenderBuffer materialBuffer;
     std::vector<vg::Subpass> subpasses;
     std::vector<vg::SubpassDependency> dependecies;
     std::vector<bool> isTransparent;
     std::vector<std::vector<class Material *>> materials;
 };
-
-// class MaterialArray {
-//   public:
-//     MaterialArray(int maxFramesInFlight);
-
-//     MaterialArray();
-//     MaterialArray(MaterialArray &&);
-//     MaterialArray &operator=(MaterialArray &&);
-//     MaterialArray(const MaterialArray &) = delete;
-//     MaterialArray &operator=(const MaterialArray &) = delete;
-//     ~MaterialArray();
-
-//   private:
-//     friend class Renderer;
-//     friend class Material;
-//     friend class BatchManager;
-//     RenderBuffer materialBuffer;
-//     std::vector<vg::Subpass> subpasses;
-//     std::vector<vg::SubpassDependency> dependecies;
-//     std::vector<bool> isTransparent;
-//     std::vector<std::vector<class Material *>> materials;
-// };
 
 /**
  * @brief Class used to represent a material used for rendering.
@@ -57,7 +35,7 @@ class Material {
     friend class RenderObject;
     friend class Batch;
 
-    // static MaterialArray *materialArray;
+    static MaterialArray *materialArray;
 
     uint16_t index;
     uint16_t variant;
@@ -129,4 +107,5 @@ class Material {
         Read(&t, sizeof(t), offset);
         return t;
     }
+    bool IsTransparent();
 };

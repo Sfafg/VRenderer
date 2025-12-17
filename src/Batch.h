@@ -5,11 +5,13 @@ class Material;
 class Mesh;
 class RenderObject;
 
-class BatchManager {
+class BatchArray {
     friend class GPURenderSystem;
     friend class Renderer;
 
   public:
+    static BatchArray *batchArray;
+
     static bool Exists(Mesh *mesh, Material *material);
     static uint Add(Mesh *mesh, Material *material, uint objectByteSize);
     static uint Get(Mesh *mesh, Material *material);
@@ -21,14 +23,14 @@ class BatchManager {
     static uint GetObjectCapacity(uint batchIndex);
     static uint GetObjectCount(uint batchIndex);
 
-    BatchManager(int maxFramesInFlight, uint transparencyBucketCount);
+    BatchArray(int maxFramesInFlight, uint transparencyBucketCount);
 
-    BatchManager();
-    BatchManager(BatchManager &&);
-    BatchManager &operator=(BatchManager &&);
-    BatchManager(const BatchManager &) = delete;
-    BatchManager &operator=(const BatchManager &) = delete;
-    ~BatchManager();
+    BatchArray();
+    BatchArray(BatchArray &&);
+    BatchArray &operator=(BatchArray &&);
+    BatchArray(const BatchArray &) = delete;
+    BatchArray &operator=(const BatchArray &) = delete;
+    ~BatchArray();
 
   private:
     struct Batch {
