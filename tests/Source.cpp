@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#include <fstream>
 extern "C" {
 typedef struct VkInstance_T *VkInstance;
 typedef struct VkSurfaceKHR_T *VkSurfaceKHR;
@@ -49,7 +50,7 @@ int main() {
     const uint maxFramesInFlight = 2;
     MeshArray meshManager(maxFramesInFlight);
     MaterialArray materialArray(maxFramesInFlight);
-    BatchArray batchManager(maxFramesInFlight, 10);
+    BatchArray batchManager(maxFramesInFlight, 2);
     Renderer renderer(
         maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialArray, &batchManager}
     );
@@ -76,7 +77,7 @@ int main() {
     std::vector<Material> materials;
     std::vector<Mesh> meshes;
     std::vector<RenderObject> renderObjects;
-    Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
+    // Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
 
     glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);
@@ -101,24 +102,37 @@ int main() {
         Debug::color = glm::vec4(0, 0, 1, 0.5);
         Debug::DrawSphere(glm::vec3(2, 4, 0), 1);
 
-        Debug::color = glm::vec4(0, 1, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(2, 2, 0), 1);
+        // Debug::color = glm::vec4(0, 1, 0, 0.5);
+        // Debug::DrawSphere(glm::vec3(2, 2, 0), 1);
 
-        Debug::color = glm::vec4(1, 0, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(2, 0, 0), 1);
+        // Debug::color = glm::vec4(1, 0, 0, 0.5);
+        // Debug::DrawSphere(glm::vec3(2, 0, 0), 1);
 
-        Debug::color = glm::vec4(1);
-        Debug::DrawSphere(glm::vec3(2, 0, -sin(t) * 4 - 6), 1);
-        Debug::DrawSphere(cameraPos, 1);
-        Debug::DrawArrow(glm::vec3(0), glm::normalize(glm::vec3(1)));
+        // Debug::color = glm::vec4(1);
+        // Debug::DrawSphere(glm::vec3(2, 0, -sin(t) * 4 - 6), 1);
+        // Debug::DrawSphere(cameraPos, 1);
+        // Debug::DrawArrow(glm::vec3(0), glm::normalize(glm::vec3(1)));
 
-        Debug::color = glm::vec4(1, 0, 0, 1);
-        Debug::DrawArrow(glm::vec3(0), glm::vec3(1, 0, 0));
-        Debug::color = glm::vec4(0, 1, 0, 1);
-        Debug::DrawArrow(glm::vec3(0), glm::vec3(0, 1, 0));
-        Debug::color = glm::vec4(0, 0, 1, 1);
-        Debug::DrawArrow(glm::vec3(0), glm::vec3(0, 0, 1));
+        // Debug::color = glm::vec4(1, 0, 0, 1);
+        // Debug::DrawArrow(glm::vec3(0), glm::vec3(1, 0, 0));
+        // Debug::color = glm::vec4(0, 1, 0, 1);
+        // Debug::DrawArrow(glm::vec3(0), glm::vec3(0, 1, 0));
+        // Debug::color = glm::vec4(0, 0, 1, 1);
+        // Debug::DrawArrow(glm::vec3(0), glm::vec3(0, 0, 1));
 
+        for (int i = 0; i < BatchArray::batchArray->drawCalls.size(); i++) {
+            BatchArray::DrawCall drawCall = BatchArray::batchArray->drawCallBuffer.Read<BatchArray::DrawCall>(i);
+            std::cout << "DrawCall: " << i << "\n"
+                      << "indexCount " << drawCall.indexCount << "\n"
+                      << "instanceCount " << drawCall.instanceCount << "\n"
+                      << "firstIndex " << drawCall.firstIndex << "\n"
+                      << "vertexOffset " << drawCall.vertexOffset << "\n"
+                      << "firstInstance " << drawCall.firstInstance << "\n"
+                      << "materialIndex " << drawCall.materialIndex << "\n"
+                      << "meshIndex " << drawCall.meshIndex << "\n\n";
+        }
+
+        // break;
         Debug::Frame();
         renderer.RenderFrame(
             generalQueue, proj * view,
@@ -156,9 +170,17 @@ vg::Instance CreateInstance() {
     uint32_t glfwExtensionCount = 0;
     const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     return vg::Instance({glfwExtensions, glfwExtensionCount}, [](vg::MessageSeverity severity, const char *message) {
+        std::ofstream logFile("logs.txt", std::ofstream::app);
+        switch (severity) {
+        case vg::MessageSeverity::Info: logFile << "Info: "; break;
+        case vg::MessageSeverity::Warning: logFile << "Warning: "; break;
+        case vg::MessageSeverity::Error: logFile << "Error: "; break;
+        default: break;
+        }
+        logFile << message << "\n";
+
         if (severity < vg::MessageSeverity::Warning) return;
         std::cout << message << '\n' << '\n';
-        exit(0);
     });
 }
 vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue) {
@@ -182,7 +204,7 @@ glm::vec3 GetMoveDirection(GLFWwindow *window, float speed) {
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
 
     if (length(direction) > 0.0f) direction = normalize(direction);
-    return direction * speed;
+    return direction * speed * 2.0f;
 }
 
 glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed) {
@@ -198,7 +220,7 @@ glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed)
     if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) mouseDelta += glm::dvec2(0, 1);
     if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) mouseDelta -= glm::dvec2(1, 0);
     if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) mouseDelta += glm::dvec2(1, 0);
-    mouseDelta *= speed * 10;
+    mouseDelta *= speed * 20;
 
     // if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1))
     {

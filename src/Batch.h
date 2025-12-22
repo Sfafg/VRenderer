@@ -33,6 +33,7 @@ class BatchArray {
     ~BatchArray();
 
   private:
+  public:
     struct Batch {
         uint objectDataOffset;
         uint firstObjectIndex;
@@ -69,13 +70,12 @@ class BatchArray {
     uint _GetObjectCount(uint batchIndex);
 
   private:
-    bool DrawCallExists(Mesh *mesh, Material *material);
-    int GetDrawCall(Mesh *mesh, Material *material);
-    void InsertDrawCall(Mesh *mesh, Material *material);
+    uint GetDrawCall(Mesh *mesh, Material *material);
+    void InsertDrawCall(uint index, Mesh* mesh, Material* material);
     void DeleteDrawCall(uint id);
 
-    uint AddOrGetDrawCall(Mesh *mesh, Material *material);
-    uint AddOrGetTransparentDrawCall(Mesh *mesh, Material *material);
+    // uint AddOrGetDrawCall(Mesh *mesh, Material *material);
+    // uint AddOrGetTransparentDrawCall(Mesh *mesh, Material *material);
 
     friend RenderObject;
     void AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize);
@@ -88,6 +88,7 @@ class BatchArray {
     void NotifyMeshDestroy(uint index);
 
   private:
+  public:
     uint transparencyBucketCount = 0;
     uint firstTransparentDrawCall = 0;
     uint transparentDrawCallsCount = 0;

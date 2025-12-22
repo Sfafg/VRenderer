@@ -23,7 +23,7 @@ GPURenderSystem::GPURenderSystem(uint framesInFlight) {
               {2, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
               {3, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
               {4, DescriptorType::StorageBuffer, 1, ShaderStage::Compute}}},
-            {{ShaderStage::Compute, 0, sizeof(glm::mat4) + sizeof(uint32_t) * 4}}
+            {{ShaderStage::Compute, 0, 96}}
         )
     ));
 
@@ -81,8 +81,13 @@ void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, const glm::mat4 &
         cmd::PushConstants(
             gpuRenderer->GetPipelineLayout(), ShaderStage::Compute, 0,
             std::make_tuple(
-                0, 0, BatchArray::batchArray->totalObjects, (uint32_t)BatchArray::batchArray->batches.size(),
-                cameraViewProjection
+                0, 0, BatchArray::batchArray->totalObjects, (uint32_t)BatchArray::batchArray->batches.size(), 
+                std::make_tuple(
+                    (int)BatchArray::batchArray->transparentDrawCallsCount,
+                    (int)BatchArray::batchArray->firstTransparentDrawCall,
+                    (int)BatchArray::batchArray->totalObjects,
+                    (int)BatchArray::batchArray->drawCalls.size(),
+                    cameraViewProjection)
             )
         ),
         cmd::Dispatch(std::ceil(BatchArray::batchArray->totalObjects / 1024.0), 1, 1)

@@ -77,6 +77,7 @@ void RenderBuffer::Write(uint32_t regionID, const T &data, uint32_t writeOffset)
 
 template <typename T> T RenderBuffer::Read(uint32_t regionID, uint32_t readOffset) {
     T result;
-    Read(regionID, &result, sizeof(T), readOffset);
+    uint readSize = Read(regionID, &result, sizeof(T), readOffset);
+    assert(readSize == sizeof(T));
     return result;
 }

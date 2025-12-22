@@ -52,6 +52,7 @@ void main() {
 
     BatchInfo batch = GetBatchData(objectID);
     uint drawCall = batch.drawCall;
+    float cameraDistance=0;
 
     // Lod selection.
     if (batch.lods[0] != -1U) {
@@ -60,7 +61,8 @@ void main() {
         // TODO: Add dedicated buffer for transformation matrices and remove object data element size.
         uint dataIndex = objectID * batch.objectDataElementSize / 4;
         vec3 objectPosition = vec3(batchData[dataIndex + 12], batchData[dataIndex + 13], batchData[dataIndex + 14]);
-        float d = distance(objectPosition, cameraPosition) / 100;
+        cameraDistance = distance(objectPosition,cameraPosition);
+        float d = cameraDistance / 100;
         uint lodIndex = min(lodCount, uint(d * lodCount));
         drawCall = batch.lods[lodIndex];
     }
@@ -72,8 +74,7 @@ void main() {
     // Transparency sorting.
     if (drawCall >= firstTransparentDrawCall) {
         float farPlane = 1000;
-        float cameraDistance = 0;
-        uint bucketCount = 10;
+        uint bucketCount = 4;
 
         uint bucketID = uint(ceil(sqrt(cameraDistance / farPlane) * bucketCount));
         drawCall = bucketID * transparentDrawCallCount + (drawCall - firstTransparentDrawCall);
