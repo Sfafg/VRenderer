@@ -73,7 +73,9 @@ void Renderer::SetPassData(const PassData &data) {
     memcpy(p, &data, sizeof(data));
 }
 
-void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, const PassData &data) {
+void Renderer::RenderFrame(
+    Queue &queue, const glm::mat4 &cameraViewProjection, const glm::mat4 &cameraViewProjection_, const PassData &data
+) {
     auto &bManager = *dataArrays.batchArray;
     auto &materialManager = *dataArrays.materialArray;
     auto &meshManager = *dataArrays.meshArray;
@@ -128,9 +130,9 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
         );
     }
 
-    // Shadow pass
     commandBuffer[frameIndex].Clear().Begin();
 
+    // Data transfer.
     vg::CmdBuffer transferCommands(queue);
     transferCommands.Begin();
 
@@ -144,6 +146,7 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
     );
     transferCommands.End().Submit().Await();
 
+    // Shadow pass
     gpuRenderSystem.RecordCommands(commandBuffer[frameIndex], data.lightViewProjection, frameIndex);
 
     commandBuffer[frameIndex].Append(
@@ -171,14 +174,13 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
         ),
         cmd::BindPipeline(shadowPass.GetPipelines()[0])
     );
-
+    int subpassIndex = 0;
     for (int i = 0; i < bManager.drawCalls.size(); i++) {
-        if (i != 0 &&
-            std::get<0>(bManager.drawCallMaterialIndices[i - 1]) != std::get<0>(bManager.drawCallMaterialIndices[i])) {
-            commandBuffer[frameIndex].Append(
-                cmd::NextSubpass(SubpassContents::Inline),
-                cmd::BindPipeline(shadowPass.GetPipelines()[std::get<0>(bManager.drawCallMaterialIndices[i])])
-            );
+        int materialIndex = std::get<0>(bManager.drawCallMaterialIndices[i]);
+        for (; subpassIndex < materialIndex; subpassIndex++) {
+            commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
+            if (subpassIndex == materialIndex - 1)
+                commandBuffer[frameIndex].Append(cmd::BindPipeline(shadowPass.GetPipelines()[materialIndex]));
         }
 
         commandBuffer[frameIndex].Append(
@@ -188,29 +190,8 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
             )
         );
     }
-
-    // int batchMaterialOffset = 0;
-    // for (int i = 0; i < materialManager.subpasses.size(); i++) {
-    //     if (i != 0) commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
-
-    //     if (batchMaterialOffset >= bManager.batches.size() ||
-    //         std::get<0>(bManager.drawCallMaterialIndices[batchMaterialOffset]) != i)
-    //         continue;
-
-    //     int batchMaterialCount = 1;
-    //     for (int j = batchMaterialOffset + 1; j < bManager.batches.size(); j++) {
-    //         if (std::get<0>(bManager.drawCallMaterialIndices[j]) == i) batchMaterialCount++;
-    //         else break;
-    //     }
-    //     commandBuffer[frameIndex].Append(
-    //         cmd::BindPipeline(shadowPass.GetPipelines()[i]),
-    //         cmd::DrawIndexedIndirect(
-    //             drawCallBuffer.GetBuffer(frameIndex), sizeof(BatchManager::DrawCall) * batchMaterialOffset,
-    //             batchMaterialCount, sizeof(BatchManager::DrawCall)
-    //         )
-    //     );
-    //     batchMaterialOffset += batchMaterialCount;
-    // }
+    for (; subpassIndex < dataArrays.materialArray->subpasses.size() - 1; subpassIndex++)
+        commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
 
     commandBuffer[frameIndex].Append(
         cmd::EndRenderpass(),
@@ -225,7 +206,7 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
     );
 
     // Color pass
-    gpuRenderSystem.RecordCommands(commandBuffer[frameIndex], cameraViewProjection, frameIndex);
+    gpuRenderSystem.RecordCommands(commandBuffer[frameIndex], cameraViewProjection_, frameIndex);
     commandBuffer[frameIndex].Append(
         cmd::PipelineBarier(
             PipelineStage::ComputeShader, PipelineStage::VertexShader, Dependency::ByRegion,
@@ -254,13 +235,15 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
         cmd::BindPipeline(renderPass.GetPipelines()[0])
     );
 
+    static bool a = true;
+    subpassIndex = 0;
     for (int i = 0; i < bManager.drawCalls.size(); i++) {
-        if (i != 0 &&
-            std::get<0>(bManager.drawCallMaterialIndices[i - 1]) != std::get<0>(bManager.drawCallMaterialIndices[i])) {
-            commandBuffer[frameIndex].Append(
-                cmd::NextSubpass(SubpassContents::Inline),
-                cmd::BindPipeline(renderPass.GetPipelines()[std::get<0>(bManager.drawCallMaterialIndices[i])])
-            );
+        int materialIndex = std::get<0>(bManager.drawCallMaterialIndices[i]);
+        // if (a) std::cout << materialIndex << ", ";
+        for (; subpassIndex < materialIndex; subpassIndex++) {
+            commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
+            if (subpassIndex == materialIndex - 1)
+                commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[materialIndex]));
         }
 
         commandBuffer[frameIndex].Append(
@@ -270,29 +253,9 @@ void Renderer::RenderFrame(Queue &queue, const glm::mat4 &cameraViewProjection, 
             )
         );
     }
-
-    // batchMaterialOffset = 0;
-    // for (int i = 0; i < materialManager.subpasses.size(); i++) {
-    //     if (i != 0) commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
-
-    //     if (batchMaterialOffset >= bManager.batches.size() ||
-    //         std::get<0>(bManager.drawCallMaterialIndices[batchMaterialOffset]) != i)
-    //         continue;
-
-    //     int batchMaterialCount = 1;
-    //     for (int j = batchMaterialOffset + 1; j < bManager.batches.size(); j++) {
-    //         if (std::get<0>(bManager.drawCallMaterialIndices[j]) == i) batchMaterialCount++;
-    //         else break;
-    //     }
-    //     commandBuffer[frameIndex].Append(
-    //         cmd::BindPipeline(renderPass.GetPipelines()[i]),
-    //         cmd::DrawIndexedIndirect(
-    //             drawCallBuffer.GetBuffer(frameIndex), sizeof(BatchManager::Batch) * batchMaterialOffset,
-    //             batchMaterialCount, sizeof(BatchManager::Batch)
-    //         )
-    //     );
-    //     batchMaterialOffset += batchMaterialCount;
-    // }
+    a = false;
+    for (; subpassIndex < dataArrays.materialArray->subpasses.size() - 1; subpassIndex++)
+        commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
 
     commandBuffer[frameIndex]
         .Append(cmd::EndRenderpass())
@@ -316,6 +279,13 @@ void Renderer::_RecreateRenderpass() {
     if (materialManager.subpasses.size() == 0 || swapchain.GetImageCount() == 0) return;
 
     vg::currentDevice->WaitUntilIdle();
+    std::vector<vg::SubpassDependency> dependencies(materialManager.subpasses.size());
+    for (int i = 0; i < materialManager.subpasses.size(); i++) {
+        dependencies[i] = vg::SubpassDependency(
+            i - 1, i, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
+            vg::Access::ColorAttachmentWrite, {}
+        );
+    }
     renderPass = RenderPass(
         {Attachment(surface.GetFormat(), ImageLayout::PresentSrc),
          Attachment(depthImage.GetFormat(), ImageLayout::DepthStencilAttachmentOptimal)},
@@ -331,7 +301,7 @@ void Renderer::_RecreateRenderpass() {
               )}},
             {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(uint)}}
         )),
-        materialManager.subpasses, materialManager.dependecies
+        materialManager.subpasses, dependencies
     );
 
     for (int i = 0; i < materialManager.subpasses.size(); i++) {
@@ -354,7 +324,7 @@ void Renderer::_RecreateRenderpass() {
             {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(uint)}}
 
         )),
-        materialManager.subpasses, materialManager.dependecies
+        materialManager.subpasses, dependencies
     );
     for (int i = 0; i < materialManager.subpasses.size(); i++) {
         materialManager.subpasses[i].colorAttachments = {

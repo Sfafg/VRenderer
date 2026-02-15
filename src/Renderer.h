@@ -44,7 +44,10 @@ class Renderer {
 
     void MakeCurrent();
     void SetPassData(const PassData &data);
-    void RenderFrame(vg::Queue &queue, const glm::mat4 &cameraViewProjection, const Renderer::PassData &data);
+    void RenderFrame(
+        vg::Queue &queue, const glm::mat4 &cameraViewProjection, const glm::mat4 &cameraViewProjection_,
+        const Renderer::PassData &data
+    );
 
     // private:
     uint maxFramesInFlight;

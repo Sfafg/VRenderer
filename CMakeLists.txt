@@ -67,7 +67,7 @@ if(VRENDERER_BUILD_TESTS)
         string(REPLACE "${SHADER_ROOT}/" "" SHADER_NAME "${SHADER}")
         add_custom_command(
             OUTPUT "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
-            COMMAND "${GLSLC_EXECUTABLE}" -Werror "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
+            COMMAND "${GLSLC_EXECUTABLE}" -g -O0 -Werror "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
             DEPENDS "${SHADER}" "${SHADER_DEPEND}"
             COMMENT "Compiling Shader: ${SHADER_NAME}.spv"
         )
@@ -128,4 +128,9 @@ if(VRENDERER_BUILD_TESTS)
     add_executable(RendererTest ${TESTS_ROOT}/RendererTest.cpp)
     target_link_libraries(RendererTest PRIVATE VRenderer glfw glm)
     add_dependencies(RendererTest Shaders Resources)
+
+# BatchTest
+    add_executable(BatchTest ${TESTS_ROOT}/BatchTest.cpp)
+    target_link_libraries(BatchTest PRIVATE VRenderer glfw glm)
+    add_dependencies(BatchTest Shaders Resources)
 endif()

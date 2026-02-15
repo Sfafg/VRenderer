@@ -12,7 +12,7 @@ struct MeshMetaData {
     float padding3;
 };
 
-layout(push_constant) uniform PushConstants { uint batchCount; };
+layout(push_constant) uniform PushConstants { uint drawCallCount; };
 
 layout(std430, binding = 0) readonly buffer MeshMetaDatas { MeshMetaData meshMetaData[]; };
 
@@ -21,7 +21,7 @@ layout(std430, binding = 1) buffer DrawCalls { DrawCall drawCalls[]; };
 layout(local_size_x = 16, local_size_y = 1, local_size_z = 1) in;
 void main() {
     uint index = gl_GlobalInvocationID.x;
-    if (index >= batchCount) return;
+    if (index >= drawCallCount) return;
 
     MeshMetaData mesh = meshMetaData[drawCalls[index].meshIndex];
 

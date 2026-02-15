@@ -146,7 +146,8 @@ void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
         uint32_t padding = GetPadding(i, writeOffset);
         writeOffset += padding;
 
-        memcpy(stagingBuffer.MapMemory() + writeOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
+        if (sizes[i] != 0)
+            memcpy(stagingBuffer.MapMemory() + writeOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
 
         offsets[i] = writeOffset;
         writeOffset += sizes[i];
@@ -233,6 +234,10 @@ uint32_t RenderBuffer::Read(uint32_t regionID, void *data, uint32_t maximumReadS
     return maximumReadSize;
 }
 
+void *RenderBuffer::GetData() {
+    if (stagingBuffer.GetMemory()) return stagingBuffer.MapMemory();
+    return nullptr;
+}
 int RenderBuffer::GetCapacity() const { return stagingBuffer.GetSize(); }
 
 int RenderBuffer::GetSize() const { return size; }

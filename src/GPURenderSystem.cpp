@@ -22,14 +22,15 @@ GPURenderSystem::GPURenderSystem(uint framesInFlight) {
               {1, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
               {2, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
               {3, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
-              {4, DescriptorType::StorageBuffer, 1, ShaderStage::Compute}}},
+              {4, DescriptorType::StorageBuffer, 1, ShaderStage::Compute},
+              {5, DescriptorType::StorageBuffer, 1, ShaderStage::Compute}}},
             {{ShaderStage::Compute, 0, 96}}
         )
     ));
 
     descriptorPool = DescriptorPool(
         framesInFlight * 2,
-        {{DescriptorType::UniformBuffer, framesInFlight}, {DescriptorType::StorageBuffer, 6 * framesInFlight}}
+        {{DescriptorType::UniformBuffer, framesInFlight}, {DescriptorType::StorageBuffer, 7 * framesInFlight}}
     );
 
     std::vector<DescriptorSetLayoutHandle> layouts(
@@ -55,6 +56,7 @@ void GPURenderSystem::AttachBuffers(
     rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, drawInstructions, 0, -1, 2, 0);
     rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, instanceMapping, 0, -1, 3, 0);
     rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, objectData, 0, -1, 4, 0);
+    rendererDescriptors[frameIndex].AttachBuffer(DescriptorType::StorageBuffer, meshMetaData, 0, -1, 5, 0);
 }
 
 void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, const glm::mat4 &cameraViewProjection, int frameIndex) {
@@ -67,9 +69,9 @@ void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, const glm::mat4 &
         ),
         cmd::PushConstants(
             clearDrawInstructions->GetPipelineLayout(), ShaderStage::Compute, 0,
-            (uint32_t)BatchArray::batchArray->batches.size()
+            (uint32_t)BatchArray::batchArray->drawCalls.size()
         ),
-        cmd::Dispatch(std::ceil(BatchArray::batchArray->batches.size() / 16.0), 1, 1),
+        cmd::Dispatch(std::ceil(BatchArray::batchArray->drawCalls.size() / 16.0), 1, 1),
         cmd::PipelineBarier(
             PipelineStage::ComputeShader, PipelineStage::ComputeShader, Dependency::ByRegion,
             {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
@@ -81,13 +83,12 @@ void GPURenderSystem::RecordCommands(vg::CmdBuffer &cmdBuffer, const glm::mat4 &
         cmd::PushConstants(
             gpuRenderer->GetPipelineLayout(), ShaderStage::Compute, 0,
             std::make_tuple(
-                0, 0, BatchArray::batchArray->totalObjects, (uint32_t)BatchArray::batchArray->batches.size(), 
+                0, 0, BatchArray::batchArray->totalObjects, (uint32_t)BatchArray::batchArray->batches.size(),
                 std::make_tuple(
                     (int)BatchArray::batchArray->transparentDrawCallsCount,
-                    (int)BatchArray::batchArray->firstTransparentDrawCall,
-                    (int)BatchArray::batchArray->totalObjects,
-                    (int)BatchArray::batchArray->drawCalls.size(),
-                    cameraViewProjection)
+                    (int)BatchArray::batchArray->firstTransparentDrawCall, (int)BatchArray::batchArray->totalObjects,
+                    (int)BatchArray::batchArray->batches.size(), cameraViewProjection
+                )
             )
         ),
         cmd::Dispatch(std::ceil(BatchArray::batchArray->totalObjects / 1024.0), 1, 1)

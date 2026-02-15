@@ -21,7 +21,6 @@ class MaterialArray {
     friend class BatchArray;
     RenderBuffer materialBuffer;
     std::vector<vg::Subpass> subpasses;
-    std::vector<vg::SubpassDependency> dependecies;
     std::vector<bool> isTransparent;
     std::vector<std::vector<class Material *>> materials;
 };
@@ -40,7 +39,7 @@ class Material {
     uint16_t index;
     uint16_t variant;
 
-    Material(bool isTransparent, vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, ByteView data);
+    Material(bool isTransparent, vg::Subpass &&subpass, ByteView data);
 
   public:
     struct CreateInfo {
@@ -84,13 +83,12 @@ class Material {
         vg::VertexLayout &&vertexInput, vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState,
         vg::Rasterizer &&rasterizer, vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
         const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
-        uint32_t childrenCount, vg::SubpassDependency &&dependency, ByteView materialData = ByteView()
+        uint32_t childrenCount, ByteView materialData = ByteView()
     );
 
     Material(
         bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath,
-        vg::VertexLayout &&vertexInput, CreateInfo &&createInfo, vg::SubpassDependency &&dependency,
-        ByteView materialData = ByteView()
+        vg::VertexLayout &&vertexInput, CreateInfo &&createInfo, ByteView materialData = ByteView()
     );
 
     Material();

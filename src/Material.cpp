@@ -15,7 +15,6 @@ MaterialArray::MaterialArray() {}
 MaterialArray::MaterialArray(MaterialArray &&o) : MaterialArray() {
     std::swap(materialBuffer, o.materialBuffer);
     std::swap(subpasses, o.subpasses);
-    std::swap(dependecies, o.dependecies);
     std::swap(materials, o.materials);
 }
 
@@ -24,7 +23,6 @@ MaterialArray &MaterialArray::operator=(MaterialArray &&o) {
 
     std::swap(materialBuffer, o.materialBuffer);
     std::swap(subpasses, o.subpasses);
-    std::swap(dependecies, o.dependecies);
     std::swap(materials, o.materials);
 
     return *this;
@@ -32,15 +30,13 @@ MaterialArray &MaterialArray::operator=(MaterialArray &&o) {
 
 MaterialArray::~MaterialArray() {}
 
-Material::Material(bool isTransparent, vg::Subpass &&subpass, vg::SubpassDependency &&dependecy, ByteView materialData)
-    : variant(0) {
+Material::Material(bool isTransparent, vg::Subpass &&subpass, ByteView materialData) : variant(0) {
     uint byteSize = materialData.Size();
     const void *data = materialData.Ptr();
 
     assert(materialArray && "Current materialArray needs to be assigned!");
 
     materialArray->subpasses.emplace_back(std::move(subpass));
-    materialArray->dependecies.emplace_back(std::move(dependecy));
 
     index = materialArray->materialBuffer.Allocate(byteSize, byteSize);
     if (data) materialArray->materialBuffer.Write(index, data, byteSize);
@@ -66,7 +62,7 @@ Material::Material(Material *material, ByteView materialData) : index(material->
 
 Material::Material(
     bool isTransparent, const char *vertexShaderPath, const char *fragmentShaderPath, vg::VertexLayout &&vertexInput,
-    CreateInfo &&createInfo, vg::SubpassDependency &&dependency, ByteView materialData
+    CreateInfo &&createInfo, ByteView materialData
 )
     : Material(
           isTransparent, vertexShaderPath, fragmentShaderPath, std::move(vertexInput),
@@ -88,7 +84,7 @@ Material::Material(
           vg::ColorBlending(
               createInfo.enableLogicOp, createInfo.logicOp, createInfo.blendConsts, createInfo.attachments
           ),
-          createInfo.dynamicState, createInfo.colorAttachments, 0, std::move(dependency), materialData
+          createInfo.dynamicState, createInfo.colorAttachments, 0, materialData
       ) {}
 
 Material::Material(
@@ -96,7 +92,7 @@ Material::Material(
     vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
     vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
     const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
-    uint32_t childrenCount, vg::SubpassDependency &&dependecy, ByteView materialData
+    uint32_t childrenCount, ByteView materialData
 )
     : Material(
           isTransparent,
@@ -112,7 +108,7 @@ Material::Material(
               ),
               {}, colorAttachments, {}, vg::AttachmentReference(1, vg::ImageLayout::DepthStencilAttachmentOptimal), {}
           ),
-          std::move(dependecy), materialData
+          materialData
       ) {}
 
 Material::Material() : index(-1), variant(0) {}
@@ -154,7 +150,6 @@ Material::~Material() {
         BatchArray::batchArray->NotifyMaterialDestroy(index);
         materialArray->materialBuffer.Deallocate(index);
         materialArray->subpasses.erase(materialArray->subpasses.begin() + index);
-        materialArray->dependecies.erase(materialArray->dependecies.begin() + index);
         for (int i = index; i < materialArray->materials.size(); i++)
             for (int j = 0; j < materialArray->materials[i].size(); j++) materialArray->materials[i][j]->index--;
 

@@ -27,6 +27,7 @@ class Debug {
     static void DrawTriangle(glm::vec3 a, glm::vec3 b, glm::vec3 c, int frameDuration = 1);
     static void DrawCylinder(glm::vec3 center, float radius, float height, int frameDuration = 1);
     static void DrawCone(glm::vec3 center, float baseRadius, float height, int frameDuration = 1);
+    static void DrawFrustum(const glm::mat4 &view, const glm::mat4 &projection, int frameDuration = 1);
 
     static void Frame();
 

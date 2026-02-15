@@ -45,7 +45,6 @@ class RenderObject {
 template <typename T>
 RenderObject::RenderObject(class Mesh *mesh, class Material *material, const T &batchData, bool debugObject)
     : RenderObject(mesh, material, sizeof(T), &batchData, debugObject) {}
-    
 
 template <typename T> void RenderObject::SetData(const T &data) { return SetData(&data, sizeof(T)); }
 

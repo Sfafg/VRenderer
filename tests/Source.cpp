@@ -1,4 +1,6 @@
+#include "Handle.h"
 #include "glm/ext/quaternion_trigonometric.hpp"
+#include "glm/fwd.hpp"
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -27,6 +29,7 @@ struct RAIIGLFW {
     ~RAIIGLFW();
 };
 
+// TODO: implement a more test driven development for stuff that is managing graphics memory, mainly batches.
 GLFWwindow *CreateWindow();
 vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window);
 vg::Instance CreateInstance();
@@ -50,7 +53,7 @@ int main() {
     const uint maxFramesInFlight = 2;
     MeshArray meshManager(maxFramesInFlight);
     MaterialArray materialArray(maxFramesInFlight);
-    BatchArray batchManager(maxFramesInFlight, 2);
+    BatchArray batchManager(maxFramesInFlight, 20);
     Renderer renderer(
         maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialArray, &batchManager}
     );
@@ -65,27 +68,25 @@ int main() {
              {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
              {2, 1, vg::Format::R32UINT}}
         ),
-        {.cullMode = vg::CullMode::Back},
-        vg::SubpassDependency(
-            -1, 0, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
-            vg::Access::ColorAttachmentWrite, {}
-        ),
-        std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f))
+        {.cullMode = vg::CullMode::Back}, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f))
     );
     Debug::Init();
 
     std::vector<Material> materials;
     std::vector<Mesh> meshes;
     std::vector<RenderObject> renderObjects;
-    // Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
+    Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
 
     glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);
-    glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, 0.01f, 1000.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, 0.01f, 200.0f);
     proj[1][1] *= -1;
 
     glm::mat4 lightProj = glm::ortho(-100.f, 140.f, -100.f, 100.f, -400.f, 400.f);
     glm::mat4 lightView = glm::lookAt(glm::vec3(100), glm::vec3(0), glm::vec3(0, 0, 1));
+    glm::mat4 frustum = glm::perspective(glm::radians(40.0f), w / (float)h, 2.0f, 10.0f);
+    // frustum[1][1] *= -1;
+    glm::mat4 view_ = glm::mat4(1);
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
@@ -100,42 +101,17 @@ int main() {
         static float t = 0;
         t += 0.01;
         Debug::color = glm::vec4(0, 0, 1, 0.5);
-        Debug::DrawSphere(glm::vec3(2, 4, 0), 1);
+        Debug::DrawSphere(glm::vec3(20, 4, 0), 1);
+        Debug::color = glm::vec4(0, 1, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 2, 0), 1);
+        Debug::color = glm::vec4(1, 0, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 0, 0), 1);
 
-        // Debug::color = glm::vec4(0, 1, 0, 0.5);
-        // Debug::DrawSphere(glm::vec3(2, 2, 0), 1);
+        if (glfwGetKey(window, GLFW_KEY_SPACE)) { view_ = view; }
 
-        // Debug::color = glm::vec4(1, 0, 0, 0.5);
-        // Debug::DrawSphere(glm::vec3(2, 0, 0), 1);
-
-        // Debug::color = glm::vec4(1);
-        // Debug::DrawSphere(glm::vec3(2, 0, -sin(t) * 4 - 6), 1);
-        // Debug::DrawSphere(cameraPos, 1);
-        // Debug::DrawArrow(glm::vec3(0), glm::normalize(glm::vec3(1)));
-
-        // Debug::color = glm::vec4(1, 0, 0, 1);
-        // Debug::DrawArrow(glm::vec3(0), glm::vec3(1, 0, 0));
-        // Debug::color = glm::vec4(0, 1, 0, 1);
-        // Debug::DrawArrow(glm::vec3(0), glm::vec3(0, 1, 0));
-        // Debug::color = glm::vec4(0, 0, 1, 1);
-        // Debug::DrawArrow(glm::vec3(0), glm::vec3(0, 0, 1));
-
-        for (int i = 0; i < BatchArray::batchArray->drawCalls.size(); i++) {
-            BatchArray::DrawCall drawCall = BatchArray::batchArray->drawCallBuffer.Read<BatchArray::DrawCall>(i);
-            std::cout << "DrawCall: " << i << "\n"
-                      << "indexCount " << drawCall.indexCount << "\n"
-                      << "instanceCount " << drawCall.instanceCount << "\n"
-                      << "firstIndex " << drawCall.firstIndex << "\n"
-                      << "vertexOffset " << drawCall.vertexOffset << "\n"
-                      << "firstInstance " << drawCall.firstInstance << "\n"
-                      << "materialIndex " << drawCall.materialIndex << "\n"
-                      << "meshIndex " << drawCall.meshIndex << "\n\n";
-        }
-
-        // break;
         Debug::Frame();
         renderer.RenderFrame(
-            generalQueue, proj * view,
+            generalQueue, proj * view, proj * view,
             {.lightViewProjection = lightProj * lightView,
              .cameraPosition = cameraPos,
              .lightDirection = glm::vec3(-1),
@@ -204,7 +180,7 @@ glm::vec3 GetMoveDirection(GLFWwindow *window, float speed) {
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
 
     if (length(direction) > 0.0f) direction = normalize(direction);
-    return direction * speed * 2.0f;
+    return direction * speed * 0.1f;
 }
 
 glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed) {
@@ -216,16 +192,21 @@ glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed)
     glm::dvec2 mouseDelta = mouseP - lastMouseP;
     lastMouseP = mouseP;
     mouseDelta = glm::dvec2(0, 0);
+    float roll = 0;
     if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) mouseDelta -= glm::dvec2(0, 1);
     if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) mouseDelta += glm::dvec2(0, 1);
     if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) mouseDelta -= glm::dvec2(1, 0);
     if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) mouseDelta += glm::dvec2(1, 0);
-    mouseDelta *= speed * 20;
+    if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) roll -= 1;
+    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) roll += 1;
+    mouseDelta *= speed * 10;
+    roll *= speed * 10;
 
     // if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1))
     {
         cameraRotation = glm::angleAxis((float)-mouseDelta.x, cameraRotation * glm::vec3(0, 0, 1)) * cameraRotation;
         cameraRotation = glm::angleAxis((float)-mouseDelta.y, cameraRotation * glm::vec3(1, 0, 0)) * cameraRotation;
+        cameraRotation = glm::angleAxis((float)-roll, cameraRotation * glm::vec3(0, 1, 0)) * cameraRotation;
         cameraRotation = glm::normalize(cameraRotation);
     }
 

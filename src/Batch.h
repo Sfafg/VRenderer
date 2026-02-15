@@ -43,13 +43,13 @@ class BatchArray {
     };
 
     struct DrawCall {
-        uint indexCount;
-        uint instanceCount;
-        uint firstIndex;
-        uint vertexOffset;
-        uint firstInstance;
-        uint materialIndex;
-        uint meshIndex;
+        uint indexCount = 0;
+        uint instanceCount = 0;
+        uint firstIndex = 0;
+        uint vertexOffset = 0;
+        uint firstInstance = 0;
+        uint materialIndex = 0;
+        uint meshIndex = 0;
 
         bool operator==(const std::tuple<Material *, Mesh *> &o) const;
         bool operator<(const std::tuple<Material *, Mesh *> &o) const;
@@ -71,7 +71,7 @@ class BatchArray {
 
   private:
     uint GetDrawCall(Mesh *mesh, Material *material);
-    void InsertDrawCall(uint index, Mesh* mesh, Material* material);
+    void InsertDrawCall(uint index, Mesh *mesh, Material *material);
     void DeleteDrawCall(uint id);
 
     // uint AddOrGetDrawCall(Mesh *mesh, Material *material);
