@@ -1,0 +1,79 @@
+#version 450
+
+layout(push_constant) uniform PushConstants {
+    uvec2 inputSize;
+    uint mipCount;
+};
+
+layout(binding = 0) buffer Counter { uint finishedRegionCount; };
+layout(binding = 1) uniform sampler2D depthImage;
+layout(binding = 2, r32f) uniform image2D outputMips[12];
+
+shared float data[32][32];
+shared int finishMips;
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+void main() {
+    uvec2 globalID = gl_GlobalInvocationID.xy;
+    uvec2 localID = gl_LocalInvocationID.xy;
+    ivec2 size = imageSize(outputMips[0]);
+
+    float d1 = texture(depthImage, (vec2(globalID) + vec2(0, 0)) / size).x;
+    float d2 = texture(depthImage, (vec2(globalID) + vec2(0, 1)) / size).x;
+    float d3 = texture(depthImage, (vec2(globalID) + vec2(1, 0)) / size).x;
+    float d4 = texture(depthImage, (vec2(globalID) + vec2(1, 1)) / size).x;
+    float d = max(max(d1, d2), max(d3, d4));
+    data[localID.x][localID.y] = d;
+    imageStore(outputMips[0], ivec2(globalID), vec4(d));
+    barrier();
+
+    for (int i = 1; i < 6; i++) {
+        localID /= 2;
+        localID *= 2;
+        d1 = data[localID.x + 0][localID.y + 0];
+        d2 = data[localID.x + 0][localID.y + 1];
+        d3 = data[localID.x + 1][localID.y + 0];
+        d4 = data[localID.x + 1][localID.y + 1];
+        d = max(max(d1, d2), max(d3, d4));
+        localID /= 2;
+        globalID /= 2;
+        data[localID.x][localID.y] = d;
+        imageStore(outputMips[i], ivec2(globalID), vec4(d));
+        barrier();
+    }
+
+    localID = gl_LocalInvocationID.xy;
+    globalID = localID;
+    if (localID.x == 0 && localID.y == 0) {
+        uint count = atomicAdd(finishedRegionCount, 1);
+        uint totalTileCount = (uint(ceil(inputSize.x / 64)) * uint(ceil(inputSize.y / 64)));
+        finishMips = 0;
+        if (count == totalTileCount - 1) finishMips = 1;
+    }
+    barrier();
+    if (finishMips == 0) return;
+
+    d1 = imageLoad(outputMips[5], ivec2(globalID) * 2 + ivec2(0, 0)).x;
+    d2 = imageLoad(outputMips[5], ivec2(globalID) * 2 + ivec2(0, 1)).x;
+    d3 = imageLoad(outputMips[5], ivec2(globalID) * 2 + ivec2(1, 0)).x;
+    d4 = imageLoad(outputMips[5], ivec2(globalID) * 2 + ivec2(1, 1)).x;
+    d = max(max(d1, d2), max(d3, d4));
+    data[localID.x][localID.y] = d;
+    imageStore(outputMips[6], ivec2(globalID), vec4(d));
+    barrier();
+
+    for (int i = 7; i < 12; i++) {
+        localID /= 2;
+        localID *= 2;
+        d1 = data[localID.x + 0][localID.y + 0];
+        d2 = data[localID.x + 0][localID.y + 1];
+        d3 = data[localID.x + 1][localID.y + 0];
+        d4 = data[localID.x + 1][localID.y + 1];
+        d = max(max(d1, d2), max(d3, d4));
+        localID /= 2;
+        globalID /= 2;
+        data[localID.x][localID.y] = d;
+        imageStore(outputMips[i], ivec2(globalID), vec4(d));
+        barrier();
+    }
+}
