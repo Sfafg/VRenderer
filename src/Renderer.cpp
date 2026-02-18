@@ -1,8 +1,12 @@
 #include "Renderer.h"
 #include "GPURenderSystem.h"
 using namespace vg;
+using namespace cmd;
 
-// TODO: Shadow pass, merge vertex shaders that do not differ.
+// OPTYMIZATION: Shadow pass, merge vertex shaders that do not differ.
+// TODO: Simplify and refactor this a lot. Think about splitting it more into RenderSystems.
+// TODO: Depth image reduction.
+struct DrawFromBuffer;
 
 Renderer *currentRenderer;
 
@@ -13,15 +17,31 @@ Renderer::Renderer(
     const DataArrays &managers
 )
     : maxFramesInFlight(maxFramesInFlight), frameIndex(0), dataArrays(managers) {
+
     surface = Surface(windowSurface, {Format::BGRA8SRGB, ColorSpace::SRGBNL});
     swapchain = Swapchain(surface, maxFramesInFlight, width, height);
     depthImage = Image(
         {swapchain.GetWidth(), swapchain.GetHeight()},
         {Format::D32SFLOAT, Format::D32SFLOATS8UINT, Format::x8D24UNORMPACK}, {FormatFeature::DepthStencilAttachment},
-        {ImageUsage::DepthStencilAttachment}, 1, 1
+        {ImageUsage::DepthStencilAttachment, ImageUsage::Sampled}
     );
     Allocate(depthImage, {MemoryProperty::DeviceLocal});
     depthImageView = ImageView(depthImage, {ImageAspect::Depth});
+
+    hiZBuffer = Image(
+        {swapchain.GetWidth() / 2, swapchain.GetHeight() / 2}, {Format::R32SFLOAT}, {FormatFeature::ColorAttachment},
+        {ImageUsage::Sampled, ImageUsage::Storage}, -1
+    );
+    Allocate(hiZBuffer, {MemoryProperty::DeviceLocal});
+
+    hiZBufferSampler = Sampler(
+        Filter::Linear, Filter::Linear, SamplerMipmapMode::Nearest, SamplerAddressMode::ClampToEdge,
+        SamplerAddressMode::ClampToEdge, SamplerAddressMode::ClampToEdge, 0, 0, 1000, SamplerReduction::Max
+    );
+    hiZBufferMips.resize(hiZBuffer.GetMipLevels());
+    hiZBufferView = ImageView(hiZBuffer, ImageSubresource(ImageAspect::Color, 0, hiZBuffer.GetMipLevels()));
+    for (int i = 0; i < hiZBufferMips.size(); i++)
+        hiZBufferMips[i] = ImageView(hiZBuffer, ImageSubresource(ImageAspect::Color, i));
 
     shadowImage = Image(
         {8192, 8192}, {Format::D32SFLOAT, Format::D32SFLOATS8UINT, Format::x8D24UNORMPACK},
@@ -52,8 +72,8 @@ Renderer::Renderer(
             imageAvailableSemaphore[i] = Semaphore();
             inFlightFence[i] = Fence(true);
         }
-        passBuffer = vg::Buffer(sizeof(PassData), vg::BufferUsage::UniformBuffer);
-        vg::Allocate(passBuffer, vg::MemoryProperty::HostVisible);
+        lightBuffer = vg::Buffer(sizeof(LightData), vg::BufferUsage::UniformBuffer);
+        vg::Allocate(lightBuffer, vg::MemoryProperty::HostVisible);
 
         gpuRenderSystem = GPURenderSystem(maxFramesInFlight);
     }
@@ -68,13 +88,14 @@ void Renderer::MakeCurrent() {
     currentRenderer = this;
 }
 
-void Renderer::SetPassData(const PassData &data) {
-    void *p = passBuffer.MapMemory();
+void Renderer::SetLightData(const LightData &data) {
+    void *p = lightBuffer.MapMemory();
     memcpy(p, &data, sizeof(data));
 }
 
 void Renderer::RenderFrame(
-    Queue &queue, const glm::mat4 &cameraViewProjection, const glm::mat4 &cameraViewProjection_, const PassData &data
+    vg::Queue &queue, const glm::mat4 &cameraViewProjection, const glm::vec3 &cameraPosition, float nearPlane,
+    float farPlane, const Renderer::LightData &data, bool updateDrawInstructions
 ) {
     auto &bManager = *dataArrays.batchArray;
     auto &materialManager = *dataArrays.materialArray;
@@ -94,11 +115,10 @@ void Renderer::RenderFrame(
     inFlightFence[frameIndex].Await(true);
 
     auto [imageIndex, result] = swapchain.GetNextImageIndex(imageAvailableSemaphore[frameIndex]);
-    SetPassData(data);
+    SetLightData(data);
 
-    cmd::CopyBuffer copyComands[9] = {cmd::CopyBuffer(), cmd::CopyBuffer(), cmd::CopyBuffer(),
-                                      cmd::CopyBuffer(), cmd::CopyBuffer(), cmd::CopyBuffer(),
-                                      cmd::CopyBuffer(), cmd::CopyBuffer(), cmd::CopyBuffer()};
+    CopyBuffer copyComands[9] = {CopyBuffer(), CopyBuffer(), CopyBuffer(), CopyBuffer(), CopyBuffer(),
+                                 CopyBuffer(), CopyBuffer(), CopyBuffer(), CopyBuffer()};
     bool anyNeedsReataching = false;
     anyNeedsReataching |= materialBuffer.FlushBuffer(frameIndex, &copyComands[0]);
     anyNeedsReataching |= vertexBuffer.FlushBuffer(frameIndex, &copyComands[1]);
@@ -124,8 +144,8 @@ void Renderer::RenderFrame(
             DescriptorType::StorageBuffer, drawCallBuffer.GetBuffer(frameIndex), 0, -1, 3, 0
         );
         gpuRenderSystem.AttachBuffers(
-            frameIndex, passBuffer, meshDataBuffer.GetBuffer(frameIndex), objectBuffer.GetBuffer(frameIndex),
-            batchBuffer.GetBuffer(frameIndex), drawCallBuffer.GetBuffer(frameIndex),
+            frameIndex, hiZBufferView, hiZBufferSampler, meshDataBuffer.GetBuffer(frameIndex),
+            objectBuffer.GetBuffer(frameIndex), batchBuffer.GetBuffer(frameIndex), drawCallBuffer.GetBuffer(frameIndex),
             instanceMappingBuffer.GetBuffer(frameIndex)
         );
     }
@@ -138,127 +158,114 @@ void Renderer::RenderFrame(
 
     for (int i = 0; i < 8; i++)
         if (copyComands[i].regions.size() != 0) transferCommands.Append(std::move(copyComands[i]));
-    transferCommands.Append(
-        cmd::PipelineBarier(
-            PipelineStage::Transfer, PipelineStage::ComputeShader, Dependency::ByRegion,
-            {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
-        )
-    );
     transferCommands.End().Submit().Await();
 
-    // Shadow pass
-    gpuRenderSystem.RecordCommands(commandBuffer[frameIndex], data.lightViewProjection, frameIndex);
+    // // Shadow pass
+    // gpuRenderSystem.RecordCommands(
+    //     commandBuffer[frameIndex], farPlane, nearPlane, cameraPosition, data.lightViewProjection, frameIndex
+    // );
+    // commandBuffer[frameIndex].Append(
+    //     PipelineBarier(
+    //         PipelineStage::ComputeShader, PipelineStage::VertexShader, Dependency::ByRegion,
+    //         {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
+    //     ),
+    //     BeginRenderpass(
+    //         depthOnlyPass, shadowFramebuffer, {0, 0}, {8192, 8192}, {ClearDepthStencil{1.0f, 0U}},
+    //         SubpassContents::Inline
+    //     ),
+    //     PushConstants(
+    //         depthOnlyPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
+    //         std::make_tuple(0, cameraPosition, data.lightViewProjection)
+    //     ),
+    //     BindMeshBuffers(), SetViewport(Viewport(8192, 8192)), SetScissor(Scissor(8192, 8192)),
+    //     BindDescriptorSets(
+    //         depthOnlyPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[frameIndex]}
+    //     ),
+    //     DrawFromBuffer(&depthOnlyPass, drawCallBuffer.GetBuffer(frameIndex)), EndRenderpass(),
+    //     PipelineBarier(
+    //         PipelineStage::Lat0eFragmentTests, PipelineStage::FragmentShader, Dependency::ByRegion,
+    //         {ImageMemoryBarrier(
+    //             shadowImage, ImageLayout::DepthStencilAttachmentOptimal, ImageLayout::DepthStencilReadOnlyOptimal,
+    //             Access::DepthStencilAttachmentWrite, Access::ShaderRead, ImageSubresource(ImageAspect::Depth)
+    //         )}
+    //     )
+    // );
+    commandBuffer[frameIndex].Append(PipelineBarier(
+        PipelineStage::LateFragmentTests, PipelineStage::FragmentShader, Dependency::ByRegion,
+        {ImageMemoryBarrier(
+            shadowImage, ImageLayout::Undefined, ImageLayout::DepthStencilReadOnlyOptimal,
+            Access::DepthStencilAttachmentWrite, Access::ShaderRead, ImageSubresource(ImageAspect::Depth)
+        )}
+    ));
 
+    // Depth prepass.
     commandBuffer[frameIndex].Append(
-        cmd::PipelineBarier(
-            PipelineStage::ComputeShader, PipelineStage::VertexShader, Dependency::ByRegion,
-            {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
+        BeginRenderpass(
+            depthOnlyPass, depthPrepassFramebuffer, {0, 0}, {swapchain.GetWidth(), swapchain.GetHeight()},
+            {ClearDepthStencil{1.0f, 0U}}, SubpassContents::Inline
         ),
-        cmd::BeginRenderpass(
-            shadowPass, shadowFramebuffer, {0, 0}, {8192, 8192}, {ClearDepthStencil{1.0f, 0U}}, SubpassContents::Inline
+        PushConstants(
+            depthOnlyPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
+            std::make_tuple(0, cameraPosition, cameraViewProjection)
         ),
-        cmd::PushConstants(
-            shadowPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0, std::make_tuple(0, data.lightViewProjection)
+        BindMeshBuffers(), SetViewport(Viewport(swapchain.GetWidth(), swapchain.GetHeight())),
+        SetScissor(Scissor(swapchain.GetWidth(), swapchain.GetHeight())),
+        BindDescriptorSets(
+            depthOnlyPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[frameIndex]}
         ),
-        cmd::BindVertexBuffers(
-            {
-                (vg::BufferHandle)vertexBuffer.GetBuffer(frameIndex),
-                (vg::BufferHandle)instanceMappingBuffer.GetBuffer(frameIndex),
-            },
-            {0, 0}
-        ),
-        cmd::BindIndexBuffer(indexBuffer.GetBuffer(frameIndex), 0, IndexType::Uint32),
-        cmd::SetViewport(Viewport(8192, 8192)), cmd::SetScissor(Scissor(8192, 8192)),
-        cmd::BindDescriptorSets(
-            shadowPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[frameIndex]}
-        ),
-        cmd::BindPipeline(shadowPass.GetPipelines()[0])
+        DrawFromBuffer(&depthOnlyPass, drawCallBuffer.GetBuffer(frameIndex)), EndRenderpass()
     );
-    int subpassIndex = 0;
-    for (int i = 0; i < bManager.drawCalls.size(); i++) {
-        int materialIndex = std::get<0>(bManager.drawCallMaterialIndices[i]);
-        for (; subpassIndex < materialIndex; subpassIndex++) {
-            commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
-            if (subpassIndex == materialIndex - 1)
-                commandBuffer[frameIndex].Append(cmd::BindPipeline(shadowPass.GetPipelines()[materialIndex]));
-        }
-
-        commandBuffer[frameIndex].Append(
-            cmd::PushConstants(shadowPass.GetPipelineLayouts()[0], ShaderStage::Vertex, sizeof(glm::mat4), i),
-            cmd::DrawIndexedIndirect(
-                drawCallBuffer.GetBuffer(frameIndex), sizeof(BatchArray::DrawCall) * i, 1, sizeof(BatchArray::DrawCall)
-            )
-        );
-    }
-    for (; subpassIndex < dataArrays.materialArray->subpasses.size() - 1; subpassIndex++)
-        commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
 
     commandBuffer[frameIndex].Append(
-        cmd::EndRenderpass(),
-
-        cmd::PipelineBarier(
-            PipelineStage::LateFragmentTests, PipelineStage::FragmentShader, Dependency::ByRegion,
-            {ImageMemoryBarrier(
-                shadowImage, ImageLayout::DepthStencilAttachmentOptimal, ImageLayout::DepthStencilReadOnlyOptimal,
-                Access::DepthStencilAttachmentWrite, Access::ShaderRead, ImageSubresource(ImageAspect::Depth)
+        vg::cmd::PipelineBarier(
+            vg::PipelineStage::FragmentShader, vg::PipelineStage::ComputeShader,
+            {vg::ImageMemoryBarrier(
+                hiZBuffer, vg::ImageLayout::General, vg::Access::ShaderWrite, vg::Access::ShaderRead,
+                vg::ImageSubresource(vg::ImageAspect::Color, 0, hiZBufferMips.size())
+            )}
+        )
+    );
+    gpuRenderSystem.Reduce(
+        commandBuffer[frameIndex], frameIndex, depthImageView, hiZBufferMips, hiZBufferSampler, swapchain.GetWidth(),
+        swapchain.GetHeight()
+    );
+    commandBuffer[frameIndex].Append(
+        vg::cmd::PipelineBarier(
+            vg::PipelineStage::ComputeShader, vg::PipelineStage::ComputeShader,
+            {vg::ImageMemoryBarrier(
+                hiZBuffer, vg::ImageLayout::General, vg::Access::ShaderWrite, vg::Access::ShaderRead,
+                vg::ImageSubresource(vg::ImageAspect::Color, 0, hiZBufferMips.size())
             )}
         )
     );
 
     // Color pass
-    gpuRenderSystem.RecordCommands(commandBuffer[frameIndex], cameraViewProjection_, frameIndex);
-    commandBuffer[frameIndex].Append(
-        cmd::PipelineBarier(
-            PipelineStage::ComputeShader, PipelineStage::VertexShader, Dependency::ByRegion,
-            {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
-        ),
-        cmd::BeginRenderpass(
-            renderPass, framebuffers[imageIndex], {0, 0}, {swapchain.GetWidth(), swapchain.GetHeight()},
-            {ClearColor{0, 0, 0, 255}, ClearDepthStencil{1.0f, 0U}}, SubpassContents::Inline
-        ),
-        cmd::PushConstants(
-            shadowPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0, std::make_tuple(0, cameraViewProjection)
-        ),
-        cmd::BindVertexBuffers(
-            {
-                (vg::BufferHandle)vertexBuffer.GetBuffer(frameIndex),
-                (vg::BufferHandle)instanceMappingBuffer.GetBuffer(frameIndex),
-            },
-            {0, 0}
-        ),
-        cmd::BindIndexBuffer(indexBuffer.GetBuffer(frameIndex), 0, IndexType::Uint32),
-        cmd::SetViewport(Viewport(swapchain.GetWidth(), swapchain.GetHeight())),
-        cmd::SetScissor(Scissor(swapchain.GetWidth(), swapchain.GetHeight())),
-        cmd::BindDescriptorSets(
-            renderPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[frameIndex]}
-        ),
-        cmd::BindPipeline(renderPass.GetPipelines()[0])
-    );
-
-    static bool a = true;
-    subpassIndex = 0;
-    for (int i = 0; i < bManager.drawCalls.size(); i++) {
-        int materialIndex = std::get<0>(bManager.drawCallMaterialIndices[i]);
-        // if (a) std::cout << materialIndex << ", ";
-        for (; subpassIndex < materialIndex; subpassIndex++) {
-            commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
-            if (subpassIndex == materialIndex - 1)
-                commandBuffer[frameIndex].Append(cmd::BindPipeline(renderPass.GetPipelines()[materialIndex]));
-        }
-
-        commandBuffer[frameIndex].Append(
-            cmd::PushConstants(renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, sizeof(glm::mat4), i),
-            cmd::DrawIndexedIndirect(
-                drawCallBuffer.GetBuffer(frameIndex), sizeof(BatchArray::DrawCall) * i, 1, sizeof(BatchArray::DrawCall)
-            )
+    if (updateDrawInstructions)
+        gpuRenderSystem.RecordCommands(
+            commandBuffer[frameIndex], farPlane, nearPlane, cameraPosition, cameraViewProjection, frameIndex
         );
-    }
-    a = false;
-    for (; subpassIndex < dataArrays.materialArray->subpasses.size() - 1; subpassIndex++)
-        commandBuffer[frameIndex].Append(cmd::NextSubpass(SubpassContents::Inline));
-
     commandBuffer[frameIndex]
-        .Append(cmd::EndRenderpass())
+        .Append(
+            PipelineBarier(
+                PipelineStage::ComputeShader, PipelineStage::VertexShader, Dependency::ByRegion,
+                {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
+            ),
+            BeginRenderpass(
+                renderPass, framebuffers[imageIndex], {0, 0}, {swapchain.GetWidth(), swapchain.GetHeight()},
+                {ClearColor{65 / 255.f, 135 / 255.f, 245 / 255.f, 255 / 255.f}, ClearDepthStencil{1.0f, 0U}},
+                SubpassContents::Inline
+            ),
+            PushConstants(
+                renderPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
+                std::make_tuple(0, cameraPosition, cameraViewProjection)
+            ),
+            BindMeshBuffers(), SetViewport(Viewport(swapchain.GetWidth(), swapchain.GetHeight())),
+            SetScissor(Scissor(swapchain.GetWidth(), swapchain.GetHeight())),
+            BindDescriptorSets(
+                renderPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0, {descriptorSets[frameIndex]}
+            ),
+            DrawFromBuffer(&renderPass, drawCallBuffer.GetBuffer(frameIndex)), EndRenderpass()
+        )
         .End()
         .Submit(
             {{PipelineStage::ColorAttachmentOutput, imageAvailableSemaphore[frameIndex]}},
@@ -299,7 +306,7 @@ void Renderer::_RecreateRenderpass() {
               vg::DescriptorSetLayoutBinding(
                   4, vg::DescriptorType::CombinedImageSampler, 1, vg::ShaderStage::Fragment
               )}},
-            {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(uint)}}
+            {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(glm::vec3) + sizeof(uint)}}
         )),
         materialManager.subpasses, dependencies
     );
@@ -309,8 +316,8 @@ void Renderer::_RecreateRenderpass() {
         materialManager.subpasses[i].depthStencilAttachment->index = 0;
         materialManager.subpasses[i].graphicsPipeline.shaders.pop_back();
     }
-    shadowPass = RenderPass(
-        {Attachment(shadowImage.GetFormat(), ImageLayout::DepthStencilAttachmentOptimal)},
+    depthOnlyPass = RenderPass(
+        {Attachment(shadowImage.GetFormat(), ImageLayout::DepthStencilReadOnlyOptimal)},
         Vector<PipelineLayout>(PipelineLayout(
             {{vg::DescriptorSetLayoutBinding(
                   0, vg::DescriptorType::UniformBuffer, 1, {vg::ShaderStage::Vertex, vg::ShaderStage::Fragment}
@@ -321,7 +328,7 @@ void Renderer::_RecreateRenderpass() {
               vg::DescriptorSetLayoutBinding(
                   4, vg::DescriptorType::CombinedImageSampler, 1, vg::ShaderStage::Fragment
               )}},
-            {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(uint)}}
+            {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(glm::vec3) + sizeof(uint)}}
 
         )),
         materialManager.subpasses, dependencies
@@ -349,7 +356,7 @@ void Renderer::_RecreateRenderpass() {
     std::swap(descriptorPool, newDescriptorPool);
 
     for (size_t i = 0; i < descriptorSets.size(); i++) {
-        descriptorSets[i].AttachBuffer(DescriptorType::UniformBuffer, passBuffer, 0, -1, 0, 0);
+        descriptorSets[i].AttachBuffer(DescriptorType::UniformBuffer, lightBuffer, 0, -1, 0, 0);
         if (materialManager.materialBuffer.GetBuffer(i) != vg::BufferHandle())
             descriptorSets[i].AttachBuffer(
                 DescriptorType::StorageBuffer, materialManager.materialBuffer.GetBuffer(i), 0, -1, 1, 0
@@ -367,5 +374,47 @@ void Renderer::_RecreateRenderpass() {
             renderPass, {swapchain.GetImageViews()[i], depthImageView}, swapchain.GetWidth(), swapchain.GetHeight()
         );
 
-    shadowFramebuffer = vg::Framebuffer(shadowPass, {shadowImageView}, 8192, 8192);
+    depthPrepassFramebuffer =
+        vg::Framebuffer(depthOnlyPass, {depthImageView}, swapchain.GetWidth(), swapchain.GetHeight());
+    shadowFramebuffer = vg::Framebuffer(depthOnlyPass, {shadowImageView}, 8192, 8192);
+}
+
+void Renderer::DrawFromBuffer::operator()(vg::CmdBuffer &cmdBuffer) const {
+    auto &bManager = *currentRenderer->dataArrays.batchArray;
+
+    cmdBuffer.Append(BindPipeline(renderPass->GetPipelines()[0]));
+    int subpassIndex = 0;
+    for (int i = 0; i < bManager.drawCalls.size(); i++) {
+        int materialIndex = std::get<0>(bManager.drawCallMaterialIndices[i]);
+        for (; subpassIndex < materialIndex; subpassIndex++) {
+            cmdBuffer.Append(NextSubpass(SubpassContents::Inline));
+            if (subpassIndex == materialIndex - 1)
+                cmdBuffer.Append(BindPipeline(renderPass->GetPipelines()[materialIndex]));
+        }
+
+        cmdBuffer.Append(
+            PushConstants(
+                renderPass->GetPipelineLayouts()[0], ShaderStage::Vertex, sizeof(glm::mat4) + sizeof(glm::vec3), i
+            ),
+            DrawIndexedIndirect(drawBuffer, sizeof(BatchArray::DrawCall) * i, 1, sizeof(BatchArray::DrawCall))
+        );
+    }
+    for (; subpassIndex < currentRenderer->dataArrays.materialArray->subpasses.size() - 1; subpassIndex++)
+        cmdBuffer.Append(NextSubpass(SubpassContents::Inline));
+}
+
+void Renderer::BindMeshBuffers::operator()(vg::CmdBuffer &cmdBuffer) const {
+    auto &meshManager = *currentRenderer->dataArrays.meshArray;
+    auto &batchManger = *currentRenderer->dataArrays.batchArray;
+    auto frameIndex = currentRenderer->frameIndex;
+    cmdBuffer.Append(
+        BindVertexBuffers(
+            {
+                (vg::BufferHandle)meshManager.vertexBuffer.GetBuffer(frameIndex),
+                (vg::BufferHandle)batchManger.instanceMappingBuffer.GetBuffer(frameIndex),
+            },
+            {0, 0}
+        ),
+        BindIndexBuffer(meshManager.indexBuffer.GetBuffer(frameIndex), 0, IndexType::Uint32)
+    );
 }

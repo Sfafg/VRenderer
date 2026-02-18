@@ -21,14 +21,12 @@ class Renderer {
         BatchArray *batchArray;
     };
 
-    struct PassData {
+    struct LightData {
         glm::mat4 lightViewProjection;
-        glm::vec3 cameraPosition;
-        float padding1;
         glm::vec3 lightDirection;
-        float padding2;
+        float __padding1;
         glm::vec3 lightColor;
-        float padding3;
+        float __padding2;
     };
 
     Renderer();
@@ -43,24 +41,31 @@ class Renderer {
     ~Renderer();
 
     void MakeCurrent();
-    void SetPassData(const PassData &data);
     void RenderFrame(
-        vg::Queue &queue, const glm::mat4 &cameraViewProjection, const glm::mat4 &cameraViewProjection_,
-        const Renderer::PassData &data
+        vg::Queue &queue, const glm::mat4 &cameraViewProjection, const glm::vec3 &cameraPosition, float nearPlane,
+        float farPlane, const Renderer::LightData &data, bool updateDrawInstructions = true
     );
 
     // private:
+    void SetLightData(const LightData &data);
+
     uint maxFramesInFlight;
     vg::Surface surface;
     vg::Swapchain swapchain;
     vg::Image depthImage;
     vg::ImageView depthImageView;
+    vg::Framebuffer depthPrepassFramebuffer;
+
+    vg::Image hiZBuffer;
+    vg::ImageView hiZBufferView;
+    std::vector<vg::ImageView> hiZBufferMips;
+    vg::Sampler hiZBufferSampler;
 
     vg::Image shadowImage;
     vg::ImageView shadowImageView;
     vg::Sampler shadowSampler;
     vg::Framebuffer shadowFramebuffer;
-    vg::RenderPass shadowPass;
+    vg::RenderPass depthOnlyPass;
 
     vg::RenderPass renderPass;
     GPURenderSystem gpuRenderSystem;
@@ -77,6 +82,25 @@ class Renderer {
     static void RecreateRenderpass();
     void _RecreateRenderpass();
 
-    vg::Buffer passBuffer;
+    vg::Buffer lightBuffer;
     DataArrays dataArrays;
+
+    struct DrawFromBuffer {
+        DrawFromBuffer(vg::RenderPass *renderPass, vg::BufferHandle drawBuffer)
+            : renderPass(renderPass), drawBuffer(drawBuffer) {}
+        vg::RenderPass *renderPass;
+        vg::BufferHandle drawBuffer;
+
+      private:
+        void operator()(vg::CmdBuffer &commandBuffer) const;
+        friend vg::CmdBuffer;
+    };
+
+    struct BindMeshBuffers {
+        BindMeshBuffers() {};
+
+      private:
+        void operator()(vg::CmdBuffer &commandBuffer) const;
+        friend vg::CmdBuffer;
+    };
 };

@@ -120,8 +120,6 @@ uint BatchArray::_Add(Mesh *mesh, Material *material, uint objectByteSize) {
 
     InsertDrawCall(index, mesh, material);
     if (isTransparent) {
-        // TODO: For some reason when i have transparent and opaque objects this triggers twice and breaks everything,
-        // but only if opaque material is created first.
         transparentDrawCallsCount++;
         uint ind = index;
         for (int i = 0; i < transparencyBucketCount - 1; i++) {

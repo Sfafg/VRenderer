@@ -21,7 +21,7 @@ void Debug::Init() {
              {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
              {2, 1, vg::Format::R32UINT}}
         ),
-        {.cullMode = vg::CullMode::None}
+        {.cullMode = vg::CullMode::Back}
     );
 
     material = Material(
@@ -32,7 +32,7 @@ void Debug::Init() {
              {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
              {2, 1, vg::Format::R32UINT}}
         ),
-        {.cullMode = vg::CullMode::None, .depthWriteEnable = false, .enableLogicOp = false}
+        {.cullMode = vg::CullMode::Back, .depthWriteEnable = false, .enableLogicOp = false}
     );
 }
 Material *GetMaterial(const glm::vec4 &color) { return color.a == 1.0f ? &opaqueMaterial : &material; }
@@ -164,18 +164,18 @@ void Debug::DrawFrustum(const glm::mat4 &view, const glm::mat4 &projection, int 
         corners[i] /= corners[i].w;
     }
 
-    // DrawLine(corners[0], corners[1], frameDuration);
-    // DrawLine(corners[1], corners[3], frameDuration);
-    // DrawLine(corners[3], corners[2], frameDuration);
-    // DrawLine(corners[2], corners[0], frameDuration);
-    // DrawLine(corners[4], corners[5], frameDuration);
-    // DrawLine(corners[5], corners[7], frameDuration);
-    // DrawLine(corners[7], corners[6], frameDuration);
-    // DrawLine(corners[6], corners[4], frameDuration);
-    // DrawLine(corners[0], corners[4], frameDuration);
-    // DrawLine(corners[1], corners[5], frameDuration);
-    // DrawLine(corners[2], corners[6], frameDuration);
-    // DrawLine(corners[3], corners[7], frameDuration);
+    DrawLine(corners[0], corners[1], frameDuration);
+    DrawLine(corners[1], corners[3], frameDuration);
+    DrawLine(corners[3], corners[2], frameDuration);
+    DrawLine(corners[2], corners[0], frameDuration);
+    DrawLine(corners[4], corners[5], frameDuration);
+    DrawLine(corners[5], corners[7], frameDuration);
+    DrawLine(corners[7], corners[6], frameDuration);
+    DrawLine(corners[6], corners[4], frameDuration);
+    DrawLine(corners[0], corners[4], frameDuration);
+    DrawLine(corners[1], corners[5], frameDuration);
+    DrawLine(corners[2], corners[6], frameDuration);
+    DrawLine(corners[3], corners[7], frameDuration);
     objects.emplace_back(
         RenderObject(GetMesh("Cube"), GetMaterial(Debug::color), std::make_tuple(color, inverseViewProjection), true)
     );
@@ -191,6 +191,9 @@ void Debug::Frame() {
     }
 }
 
+void Debug::Reserve(BatchArray *batchArray, std::string meshName, bool transparent, int count) {
+    batchArray->ReserveObjects(batchArray->Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial), count);
+}
 glm::mat4 Debug::matrix(1);
 glm::vec4 Debug::color(1, 1, 1, 1);
 std::vector<RenderObject> Debug::objects;

@@ -1,13 +1,11 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform PassData {
+layout(set = 0, binding = 0) uniform LightData {
     mat4 lightViewProjection;
-    vec3 cameraPosition;
-    float padding1;
     vec3 lightDirection;
-    float padding2;
+    float padding1;
     vec3 lightColor;
-    float padding3;
+    float padding2;
 };
 
 layout(set = 0, binding = 4) uniform sampler2D shadowMap;
@@ -17,6 +15,7 @@ layout(location = 1) in vec3 normal;
 layout(location = 2) in vec3 fragPosition;
 layout(location = 3) in vec4 fragLightPosition;
 layout(location = 4) in float roughness;
+layout(location = 5) in vec3 cameraPosition;
 
 layout(location = 0) out vec4 outColor;
 

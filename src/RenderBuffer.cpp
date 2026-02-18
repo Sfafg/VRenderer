@@ -234,10 +234,6 @@ uint32_t RenderBuffer::Read(uint32_t regionID, void *data, uint32_t maximumReadS
     return maximumReadSize;
 }
 
-void *RenderBuffer::GetData() {
-    if (stagingBuffer.GetMemory()) return stagingBuffer.MapMemory();
-    return nullptr;
-}
 int RenderBuffer::GetCapacity() const { return stagingBuffer.GetSize(); }
 
 int RenderBuffer::GetSize() const { return size; }

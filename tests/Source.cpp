@@ -1,4 +1,5 @@
 #include "Handle.h"
+
 #include "glm/ext/quaternion_trigonometric.hpp"
 #include "glm/fwd.hpp"
 #define GLM_FORCE_RADIANS
@@ -29,7 +30,6 @@ struct RAIIGLFW {
     ~RAIIGLFW();
 };
 
-// TODO: implement a more test driven development for stuff that is managing graphics memory, mainly batches.
 GLFWwindow *CreateWindow();
 vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window);
 vg::Instance CreateInstance();
@@ -53,7 +53,7 @@ int main() {
     const uint maxFramesInFlight = 2;
     MeshArray meshManager(maxFramesInFlight);
     MaterialArray materialArray(maxFramesInFlight);
-    BatchArray batchManager(maxFramesInFlight, 20);
+    BatchArray batchManager(maxFramesInFlight, 50);
     Renderer renderer(
         maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialArray, &batchManager}
     );
@@ -79,17 +79,34 @@ int main() {
 
     glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);
-    glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, 0.01f, 200.0f);
+
+    float nearPlane = 0.01f;
+    float farPlane = 200.0f;
+    glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, nearPlane, farPlane);
     proj[1][1] *= -1;
 
     glm::mat4 lightProj = glm::ortho(-100.f, 140.f, -100.f, 100.f, -400.f, 400.f);
     glm::mat4 lightView = glm::lookAt(glm::vec3(100), glm::vec3(0), glm::vec3(0, 0, 1));
-    glm::mat4 frustum = glm::perspective(glm::radians(40.0f), w / (float)h, 2.0f, 10.0f);
-    // frustum[1][1] *= -1;
-    glm::mat4 view_ = glm::mat4(1);
+
+    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)));
+    Debug::Reserve(&batchManager, "Cube", false, 100000);
+    for (int i = 0; i < 100000; i++) {
+        Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+        Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)));
+    }
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
+
+        // static float t = 0;
+        // t += 0.01;
+        // Debug::color = glm::vec4(0, 0, 1, 0.5);
+        // Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
+        // Debug::color = glm::vec4(0, 1, 0, 0.5);
+        // Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
+        // Debug::color = glm::vec4(1, 0, 0, 0.5);
+        // Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
 
         cameraRotation = GetRotation(window, cameraRotation, 0.001f);
         cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
@@ -98,24 +115,13 @@ int main() {
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
         );
 
-        static float t = 0;
-        t += 0.01;
-        Debug::color = glm::vec4(0, 0, 1, 0.5);
-        Debug::DrawSphere(glm::vec3(20, 4, 0), 1);
-        Debug::color = glm::vec4(0, 1, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 2, 0), 1);
-        Debug::color = glm::vec4(1, 0, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 0, 0), 1);
-
-        if (glfwGetKey(window, GLFW_KEY_SPACE)) { view_ = view; }
-
-        Debug::Frame();
+        // Debug::Frame();
         renderer.RenderFrame(
-            generalQueue, proj * view, proj * view,
+            generalQueue, proj * view, cameraPos, nearPlane, farPlane,
             {.lightViewProjection = lightProj * lightView,
-             .cameraPosition = cameraPos,
              .lightDirection = glm::vec3(-1),
-             .lightColor = glm::vec3(1, 1, 1)}
+             .lightColor = glm::vec3(1, 1, 1)},
+            !glfwGetKey(window, GLFW_KEY_SPACE)
         );
     }
     Debug::Destroy();
@@ -145,18 +151,22 @@ vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window) {
 vg::Instance CreateInstance() {
     uint32_t glfwExtensionCount = 0;
     const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    return vg::Instance({glfwExtensions, glfwExtensionCount}, [](vg::MessageSeverity severity, const char *message) {
-        std::ofstream logFile("logs.txt", std::ofstream::app);
+    std::vector<const char *> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    extensions.push_back("VK_KHR_get_physical_device_properties2");
+    return vg::Instance(extensions, [](vg::MessageSeverity severity, const char *message) {
+        static bool first = true;
+        std::ofstream logFile("logs.txt", first ? std::ofstream::trunc : std::ofstream::app);
+        first = false;
         switch (severity) {
         case vg::MessageSeverity::Info: logFile << "Info: "; break;
         case vg::MessageSeverity::Warning: logFile << "Warning: "; break;
         case vg::MessageSeverity::Error: logFile << "Error: "; break;
         default: break;
         }
-        logFile << message << "\n";
+        logFile << message << "\n\n";
 
         if (severity < vg::MessageSeverity::Warning) return;
-        std::cout << message << '\n' << '\n';
+        std::cout << '\n' << message << '\n' << '\n';
     });
 }
 vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue) {
@@ -165,19 +175,19 @@ vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue
          vg::Feature::MultiDrawIndirect}
     );
     return vg::Device(
-        {&generalQueue}, {"VK_KHR_swapchain"}, deviceFeatures, windowSurface,
+        {&generalQueue}, {"VK_KHR_swapchain", "VK_EXT_sampler_filter_minmax"}, deviceFeatures, windowSurface,
         [](auto id, auto supportedQueues, auto supportedExtensions, auto type, vg::DeviceLimits limits,
            vg::DeviceFeatures features) { return (type == vg::DeviceType::Dedicated); }
     );
 }
 glm::vec3 GetMoveDirection(GLFWwindow *window, float speed) {
     glm::vec3 direction(0);
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) direction += glm::vec3(0, 0, 1);
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) direction += glm::vec3(0, 0, -1);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) direction += glm::vec3(-1, 0, 0);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) direction += glm::vec3(1, 0, 0);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) direction += glm::vec3(0, -1, 0);
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) direction += glm::vec3(0, 0, 1);
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) direction += glm::vec3(0, 0, -1);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) direction += glm::vec3(-1, 0, 0);
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) direction += glm::vec3(1, 0, 0);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) direction += glm::vec3(0, -1, 0);
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
 
     if (length(direction) > 0.0f) direction = normalize(direction);
     return direction * speed * 0.1f;

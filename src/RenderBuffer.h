@@ -52,9 +52,6 @@ class RenderBuffer {
     uint32_t Read(uint32_t regionID, void *data, uint32_t maxReadSize = -1, uint32_t readOffset = 0);
     template <typename T> T Read(uint32_t regionID, uint32_t readOffset = 0);
 
-    // TODO: Remove.
-    void *GetData();
-
     int GetCapacity() const;
     int GetSize() const;
     vg::Flags<BufferChange> GetChange() const;

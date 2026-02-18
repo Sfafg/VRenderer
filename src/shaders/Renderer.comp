@@ -1,11 +1,14 @@
 #version 450
 #include "DrawCall.glsl"
 
+// OPTYMIZATION: Might compress it a bit, to remove padding.
 struct MeshMetaData {
     vec3 boundsMin;
     float padding1;
+
     vec3 boundsMax;
     float padding2;
+
     uint indexCount;
     uint firstIndex;
     uint vertexOffset;
@@ -14,52 +17,47 @@ struct MeshMetaData {
 
 layout(push_constant) uniform PushConstants {
     mat4 cameraViewProjection;
+
     uint batchCount;
     uint objectCount;
     uint firstTransparentDrawCall;
     uint transparentDrawCallCount;
-};
 
-layout(std140, binding = 0) uniform PassData {
-    mat4 lightViewProjection;
     vec3 cameraPosition;
-    float padding1;
-    vec3 lightDirection;
+    uint bucketCount;
+
+    float nearPlane;
+    float farPlane;
     float padding2;
-    vec3 lightColor;
     float padding3;
 };
 
+layout(binding = 0) uniform sampler2D hiZBuffer;
 layout(std430, binding = 1) readonly buffer BatchInfos { BatchInfo batchInfo[]; };
-
 layout(std430, binding = 2) buffer DrawCalls { DrawCall drawCalls[]; };
-
 layout(std430, binding = 3) buffer InstanceMappings { uint instanceMapping[]; };
-
 layout(std430, binding = 4) buffer BatchDatas { float batchData[]; };
-
 layout(std430, binding = 5) readonly buffer MeshMetaDatas { MeshMetaData meshMetaData[]; };
 
 BatchInfo GetBatch(uint sourceObjectIndex) {
-    // // Binary search.
-    // uint l = 0;
-    // uint r = batchCount - 1;
-    // uint m = 0;
-    // while (l <= r) {
-    //     m = l + uint((r - l) * 0.5);
-    //     if (batchInfo[m].firstObjectIndex < sourceObjectIndex) l = m + 1;
-    //     else if (batchInfo[m].firstObjectIndex > sourceObjectIndex) r = m - 1;
-    //     else break;
-    // }
+    uint l = 0;
+    uint r = batchCount - 1;
+    while (l <= r) {
+        uint m = (r + l) / 2;
+        if (sourceObjectIndex > batchInfo[m].firstObjectIndex) l = m + 1;
+        else if (sourceObjectIndex < batchInfo[m].firstObjectIndex) r = m - 1;
+        else return batchInfo[m];
+    }
+    return batchInfo[r];
 
+    // Linear search.
     for (int i = 1; i < batchCount; i++)
         if (batchInfo[i].firstObjectIndex > sourceObjectIndex) return batchInfo[i - 1];
 
     return batchInfo[batchCount - 1];
 }
 
-mat4 GetObjectMatrix(uint objectID){
-    BatchInfo batch = GetBatch(objectID);
+mat4 GetObjectMatrix(BatchInfo batch, uint objectID) {
     uint dataIndex = (objectID - batch.firstObjectIndex + batch.objectDataOffset) * batch.objectDataElementSize / 4;
 
     return mat4(
@@ -70,84 +68,29 @@ mat4 GetObjectMatrix(uint objectID){
     );
 }
 
-void GetBoundingBox(uint drawCall, out vec3 bMin, out vec3 bMax){
-    MeshMetaData metaData = meshMetaData[drawCalls[drawCall].meshIndex];
-    bMin = metaData.boundsMin;
-    bMax = metaData.boundsMax;
-}
-
-void SetObjectMatrix(uint objectID, mat4 matrix){
-    BatchInfo batch = GetBatch(objectID);
-    uint dataIndex = (objectID - batch.firstObjectIndex + batch.objectDataOffset) * batch.objectDataElementSize / 4;
-    batchData[dataIndex + 0]  = matrix[0][0];
-    batchData[dataIndex + 1]  = matrix[0][1];
-    batchData[dataIndex + 2]  = matrix[0][2];
-    batchData[dataIndex + 3]  = matrix[0][3];
-    batchData[dataIndex + 4]  = matrix[1][0];
-    batchData[dataIndex + 5]  = matrix[1][1];
-    batchData[dataIndex + 6]  = matrix[1][2];
-    batchData[dataIndex + 7]  = matrix[1][3];
-    batchData[dataIndex + 8]  = matrix[2][0];
-    batchData[dataIndex + 9]  = matrix[2][1];
-    batchData[dataIndex + 10] = matrix[2][2];
-    batchData[dataIndex + 11] = matrix[2][3];
-    batchData[dataIndex + 12] = matrix[3][0];
-    batchData[dataIndex + 13] = matrix[3][1];
-    batchData[dataIndex + 14] = matrix[3][2];
-    batchData[dataIndex + 15] = matrix[3][3];
-}
-
-void SetObjectColor(uint objectID, vec4 color){
-    BatchInfo batch = GetBatch(objectID);
-    uint dataIndex = (objectID - batch.firstObjectIndex + batch.objectDataOffset) * batch.objectDataElementSize / 4+16;
-    batchData[dataIndex + 0]  = color[0];
-    batchData[dataIndex + 1]  = color[1];
-    batchData[dataIndex + 2]  = color[2];
-    batchData[dataIndex + 3]  = color[3];
-}
-
-vec4 GetBoundingBoxInNDC(BatchInfo batch, uint objectID, out vec2 depth, out float cameraDistance) {
-    mat4 model = GetObjectMatrix(objectID);
+float GetBoundingBoxInNDC(BatchInfo batch, uint objectID, out vec3 minPoint, out vec3 maxPoint) {
+    mat4 model = GetObjectMatrix(batch, objectID);
     mat4 localToNDC = cameraViewProjection * model;
 
     MeshMetaData metaData = meshMetaData[drawCalls[batch.drawCall].meshIndex];
     vec3 bMin = metaData.boundsMin;
     vec3 bMax = metaData.boundsMax;
 
-    vec4 points[8] = vec4[8](
-        vec4(bMin.x, bMin.y, bMin.z, 1), vec4(bMin.x, bMin.y, bMax.z, 1), vec4(bMin.x, bMax.y, bMin.z, 1),
-        vec4(bMin.x, bMax.y, bMax.z, 1), vec4(bMax.x, bMin.y, bMin.z, 1), vec4(bMax.x, bMin.y, bMax.z, 1),
-        vec4(bMax.x, bMax.y, bMin.z, 1), vec4(bMax.x, bMax.y, bMax.z, 1)
-    );
+    minPoint = vec3(1e30);
+    maxPoint = vec3(-1e30);
 
-    points[0] = localToNDC * points[0];
-    if(points[0].w < 0) points[0].w *= -1.;
-    points[0] /= points[0].w;
+    for (int i = 0; i < 8; i++) {
+        vec4 p =
+            vec4((i & 1) != 0 ? bMax.x : bMin.x, (i & 2) != 0 ? bMax.y : bMin.y, (i & 4) != 0 ? bMax.z : bMin.z, 1);
+        p = localToNDC * p;
+        if (p.w > 0) p /= p.w;
+        else continue;
 
-    vec4 bounds = vec4(points[0].x, points[0].x, points[0].y, points[0].y);
-    cameraDistance = points[0].z;
-    depth = vec2(points[0].z,points[0].z);
-
-    for (int i = 1; i < 8; i++) {
-        points[i] = localToNDC * points[i];
-        if(points[i].w < 0)points[i].w *= -1.;
-        points[i] /= points[i].w;
-
-        if (points[i].x < bounds.x) bounds.x = points[i].x;
-        else if (points[i].x > bounds.y) bounds.y = points[i].x;
-
-        if (points[i].y < bounds.z) bounds.z = points[i].y;
-        else if (points[i].y > bounds.w) bounds.w = points[i].y;
-
-        if (points[i].z < depth.x) depth.x = points[i].z;
-        else if (points[i].z > depth.y) depth.y = points[i].z;
-
-        if (points[i].z < cameraDistance) cameraDistance = points[i].z;
+        minPoint = min(minPoint, p.xyz);
+        maxPoint = max(maxPoint, p.xyz);
     }
 
-    cameraDistance = clamp(cameraDistance * 0.5 + 0.5,0,1);
-
-    return bounds;
+    return (2.0 * nearPlane * farPlane) / (farPlane + nearPlane - minPoint.z * (farPlane - nearPlane)) / farPlane;
 }
 
 float GetCameraDistance(BatchInfo batch, uint objectID, vec3 cameraPosition) {
@@ -173,23 +116,25 @@ void main() {
     }
 
     // Visibility check.
-    float cameraDistane01;
-    vec2 depth;
-    vec4 NDCBoundingBox = GetBoundingBoxInNDC(batch, objectID, depth, cameraDistane01);
+    vec3 minPoint, maxPoint;
+    float cameraDistane01 = GetBoundingBoxInNDC(batch, objectID, minPoint, maxPoint);
 
     bool isVisible = true;
-    if ( NDCBoundingBox.x > 1 || NDCBoundingBox.y < -1 ||
-         NDCBoundingBox.z > 1 || NDCBoundingBox.w < -1 || 
-         depth.x > 1 || depth.y < -1) isVisible = false;
+    if (any(greaterThan(minPoint, vec3(1))) || any(lessThan(maxPoint, vec3(-1)))) isVisible = false;
+
+    vec4 aabb = vec4(minPoint.x, minPoint.y, maxPoint.x, maxPoint.y) * 0.5 + 0.5;
+    float objectScreenWidth = (aabb.z - aabb.x) * 1920;
+    float objectScreenHeight = (aabb.w - aabb.y) * 1080;
+    float mipLevel = floor(log2(max(objectScreenWidth, objectScreenHeight)));
+
+    float hiZDepth = textureLod(hiZBuffer, (aabb.xy + aabb.zw) * 0.5, mipLevel * 1).x;
+    if (minPoint.z > hiZDepth) isVisible = false;
 
     if (!isVisible) return;
 
     // Transparency sorting.
     if (drawCall >= firstTransparentDrawCall) {
-        // TODO: Get this from cpu.
-        uint bucketCount = 20;
-
-        float d = pow(cameraDistane01, 0.5);
+        float d = pow(cameraDistane01, 1);
         uint bucketID = min(uint(d * bucketCount), bucketCount - 1);
         bucketID = bucketCount - 1 - bucketID;
         drawCall += bucketID * transparentDrawCallCount;
