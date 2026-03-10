@@ -6,6 +6,7 @@
 #include "Material.h"
 #include "Mesh.h"
 #include "RenderObject.h"
+#include "HiZBuffer.h"
 #include "GPURenderSystem.h"
 #include "VG/VG.h"
 #include <vector>
@@ -46,9 +47,9 @@ class Renderer {
         float farPlane, const Renderer::LightData &data, bool updateDrawInstructions = true
     );
 
-    // private:
     void SetLightData(const LightData &data);
 
+    // private:
     uint maxFramesInFlight;
     vg::Surface surface;
     vg::Swapchain swapchain;
@@ -56,10 +57,11 @@ class Renderer {
     vg::ImageView depthImageView;
     vg::Framebuffer depthPrepassFramebuffer;
 
-    vg::Image hiZBuffer;
-    vg::ImageView hiZBufferView;
-    std::vector<vg::ImageView> hiZBufferMips;
-    vg::Sampler hiZBufferSampler;
+    std::vector<HiZBuffer> hiZBuffers;
+    std::vector<GPURenderer> gpuRenderers;
+
+    std::vector<HiZBuffer> shadowhiZBuffers;
+    std::vector<GPURenderer> shadowgpuRenderers;
 
     vg::Image shadowImage;
     vg::ImageView shadowImageView;
@@ -68,10 +70,10 @@ class Renderer {
     vg::RenderPass depthOnlyPass;
 
     vg::RenderPass renderPass;
-    GPURenderSystem gpuRenderSystem;
 
     vg::DescriptorPool descriptorPool;
     std::vector<vg::DescriptorSet> descriptorSets;
+    std::vector<vg::DescriptorSet> shadowPassDescriptorSets;
     std::vector<vg::Framebuffer> framebuffers;
     std::vector<vg::CmdBuffer> commandBuffer;
     std::vector<vg::Semaphore> renderFinishedSemaphore;
@@ -97,7 +99,8 @@ class Renderer {
     };
 
     struct BindMeshBuffers {
-        BindMeshBuffers() {};
+        vg::BufferHandle instanceMapping;
+        BindMeshBuffers(vg::BufferHandle instanceMapping) : instanceMapping(instanceMapping) {};
 
       private:
         void operator()(vg::CmdBuffer &commandBuffer) const;

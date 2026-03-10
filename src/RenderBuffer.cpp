@@ -3,7 +3,10 @@
 RenderBuffer::RenderBuffer() {}
 
 RenderBuffer::RenderBuffer(uint maxFramesInFlight, vg::Flags<vg::BufferUsage> bufferUsage, uint32_t capacity)
-    : size(0), bufferUsage(bufferUsage), renderingBuffers(maxFramesInFlight), bufferChangeFlag(0) {
+    : size(0), bufferUsage(bufferUsage), renderingBuffers(maxFramesInFlight) {
+    bufferChangeFlag.resize(maxFramesInFlight);
+    for (auto &b : bufferChangeFlag) b = 0;
+
     if (capacity != 0) {
         stagingBuffer = vg::Buffer(capacity, bufferUsage | vg::BufferUsage::TransferSrc);
         vg::Allocate(stagingBuffer, {vg::MemoryProperty::HostVisible, vg::MemoryProperty::HostCoherent});
@@ -40,11 +43,11 @@ bool RenderBuffer::FlushBuffer(int index, vg::cmd::CopyBuffer *copyInstruction) 
                 .Submit()
                 .Await();
 
-        bufferChangeFlag = 0;
+        bufferChangeFlag[index] = 0;
         return true;
     }
 
-    if (bufferChangeFlag.IsSet(BufferChange::Contents)) {
+    if (bufferChangeFlag[index].IsSet(BufferChange::Contents)) {
         if (copyInstruction)
             *copyInstruction = vg::cmd::CopyBuffer(
                 stagingBuffer, renderingBuffers[index], {vg::BufferCopyRegion(stagingBuffer.GetSize())}
@@ -61,7 +64,7 @@ bool RenderBuffer::FlushBuffer(int index, vg::cmd::CopyBuffer *copyInstruction) 
                 .Submit()
                 .Await();
     }
-    bufferChangeFlag = 0;
+    bufferChangeFlag[index] = 0;
     return false;
 }
 
@@ -69,7 +72,7 @@ vg::Buffer &RenderBuffer::GetBuffer(int index) { return renderingBuffers[index];
 const vg::Buffer &RenderBuffer::GetBuffer(int index) const { return renderingBuffers[index]; }
 
 uint32_t RenderBuffer::Allocate(uint32_t byteSize, uint32_t alignment, uint32_t targetRegionID) {
-    bufferChangeFlag.Set(BufferChange::Contents);
+    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
     if (targetRegionID >= sizes.size()) {
         int offset = this->size;
         int padding = alignment != 0 ? (alignment - offset % alignment) % alignment : 0;
@@ -131,17 +134,18 @@ void RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
     }
 
     sizes[regionID] = newByteSize;
-    bufferChangeFlag.Set(BufferChange::Contents);
+    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
 }
 
 void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Deallocate()");
-    bufferChangeFlag.Set(BufferChange::Contents);
+    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
 
     uint32_t writeOffset = offsets[regionID];
     uint32_t removedSize = sizes[regionID];
 
-    if (removedSize != 0) bufferChangeFlag.Set(BufferChange::Contents);
+    if (removedSize != 0)
+        for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
     for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
         uint32_t padding = GetPadding(i, writeOffset);
         writeOffset += padding;
@@ -165,7 +169,7 @@ void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
 
 void RenderBuffer::Reserve(uint32_t capacity) {
     if (capacity <= stagingBuffer.GetSize()) return;
-    bufferChangeFlag.Set(BufferChange::Size);
+    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Size);
 
     vg::Buffer newBuffer(capacity, bufferUsage | vg::BufferUsage::TransferSrc);
     vg::Allocate(newBuffer, {vg::MemoryProperty::HostCoherent, vg::MemoryProperty::HostVisible});
@@ -181,7 +185,7 @@ void RenderBuffer::Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOf
         "eraseOffset + eraseSize exceeds region size in RenderBuffer::Erase()"
     );
     assert(eraseSize > 0 && "eraseSize must be greater than 0 in RenderBuffer::Erase()");
-    bufferChangeFlag.Set(BufferChange::Contents); // do czego to jest nwm
+    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents); // do czego to jest nwm
 
     uint32_t regionOffset = offsets[regionID];
     uint32_t regionSize = sizes[regionID];
@@ -217,7 +221,7 @@ void RenderBuffer::Write(uint32_t regionID, const void *data, uint32_t dataSize,
         dataSize + writeOffset <= sizes[regionID] &&
         "dataSize + writeOffset larger than region size in RenderBuffer::Write()"
     );
-    bufferChangeFlag.Set(BufferChange::Contents);
+    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
     memcpy(stagingBuffer.MapMemory() + offsets[regionID] + writeOffset, data, dataSize);
 }
 
@@ -238,7 +242,7 @@ int RenderBuffer::GetCapacity() const { return stagingBuffer.GetSize(); }
 
 int RenderBuffer::GetSize() const { return size; }
 
-vg::Flags<BufferChange> RenderBuffer::GetChange() const { return bufferChangeFlag; }
+vg::Flags<BufferChange> RenderBuffer::GetChange(int index) const { return bufferChangeFlag[index]; }
 
 uint32_t RenderBuffer::Size(uint32_t regionID) const {
     assert(regionID < sizes.size() && "Invalid regionID in Size()");

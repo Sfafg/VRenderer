@@ -16,7 +16,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
 set(CMAKE_CXX_STANDARD 23)
 
 file(MAKE_DIRECTORY ${TESTS_ROOT} ${SRC_ROOT} ${RESOURCES_ROOT} ${RESOURCES_OUTPUT_DIR} ${SHADER_ROOT} ${SHADER_OUTPUT_DIR})
-
+include_directories(/usr/include/minizip)
 # Library
 include(FetchContent)
 FetchContent_Declare(
@@ -38,6 +38,7 @@ list(REMOVE_ITEM SRC "${SRC_ROOT}/DebugRendering.cpp")
 list(REMOVE_ITEM HEADER "${SRC_ROOT}/DebugRendering.h")
 
 add_library(VRenderer STATIC)
+
 target_link_libraries(VRenderer PUBLIC VGraphics glm)
 target_sources(VRenderer
     PRIVATE

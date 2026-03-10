@@ -1,5 +1,6 @@
 #pragma once
 #include "RenderBuffer.h"
+#include <unordered_map>
 
 class Material;
 class Mesh;
@@ -22,6 +23,7 @@ class BatchArray {
 
     static uint GetObjectCapacity(uint batchIndex);
     static uint GetObjectCount(uint batchIndex);
+    static uint GetTotalInstanceCount();
 
     BatchArray(int maxFramesInFlight, uint transparencyBucketCount);
 
@@ -47,6 +49,12 @@ class BatchArray {
         uint instanceCount = 0;
         uint firstIndex = 0;
         uint vertexOffset = 0;
+        uint firstInstance = 0;
+        uint materialIndex = 0;
+        uint meshIndex = 0;
+    };
+
+    struct PartialDrawCall {
         uint firstInstance = 0;
         uint materialIndex = 0;
         uint meshIndex = 0;
@@ -92,10 +100,11 @@ class BatchArray {
     uint transparencyBucketCount = 0;
     uint firstTransparentDrawCall = 0;
     uint transparentDrawCallsCount = 0;
-    std::vector<DrawCall> drawCalls;
+    std::vector<PartialDrawCall> drawCalls;
+    std::vector<int> drawCallInstanceCount;
     std::vector<std::tuple<uint, uint>> drawCallMaterialIndices;
+
     RenderBuffer drawCallBuffer;
-    RenderBuffer instanceMappingBuffer;
 
     std::vector<Batch> batches;
     uint totalObjects = 0;

@@ -194,6 +194,11 @@ void Debug::Frame() {
 void Debug::Reserve(BatchArray *batchArray, std::string meshName, bool transparent, int count) {
     batchArray->ReserveObjects(batchArray->Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial), count);
 }
+
+int Debug::ObjectCount(BatchArray *batchArray, std::string meshName, bool transparent) {
+    return batchArray->GetObjectCount(batchArray->Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial));
+}
+
 glm::mat4 Debug::matrix(1);
 glm::vec4 Debug::color(1, 1, 1, 1);
 std::vector<RenderObject> Debug::objects;

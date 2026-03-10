@@ -83,8 +83,7 @@ float GetBoundingBoxInNDC(BatchInfo batch, uint objectID, out vec3 minPoint, out
         vec4 p =
             vec4((i & 1) != 0 ? bMax.x : bMin.x, (i & 2) != 0 ? bMax.y : bMin.y, (i & 4) != 0 ? bMax.z : bMin.z, 1);
         p = localToNDC * p;
-        if (p.w > 0) p /= p.w;
-        else continue;
+        p /= abs(p.w);
 
         minPoint = min(minPoint, p.xyz);
         maxPoint = max(maxPoint, p.xyz);
@@ -127,7 +126,7 @@ void main() {
     float objectScreenHeight = (aabb.w - aabb.y) * 1080;
     float mipLevel = floor(log2(max(objectScreenWidth, objectScreenHeight)));
 
-    float hiZDepth = textureLod(hiZBuffer, (aabb.xy + aabb.zw) * 0.5, mipLevel * 1).x;
+    float hiZDepth = textureLod(hiZBuffer, (aabb.xy + aabb.zw) * 0.5, mipLevel + 1).x;
     if (minPoint.z > hiZDepth) isVisible = false;
 
     if (!isVisible) return;

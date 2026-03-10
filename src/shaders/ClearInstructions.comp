@@ -1,6 +1,12 @@
 #version 450
 #include "DrawCall.glsl"
 
+struct PartialDrawCall {
+    uint firstInstance;
+    uint materialIndex;
+    uint meshIndex;
+};
+
 struct MeshMetaData {
     vec3 boundsMin;
     float padding1;
@@ -18,15 +24,21 @@ layout(std430, binding = 0) readonly buffer MeshMetaDatas { MeshMetaData meshMet
 
 layout(std430, binding = 1) buffer DrawCalls { DrawCall drawCalls[]; };
 
+layout(std430, binding = 2) buffer PartialDrawCalls { PartialDrawCall partialDrawCalls[]; };
+
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 void main() {
     uint index = gl_GlobalInvocationID.x;
     if (index >= drawCallCount) return;
 
-    MeshMetaData mesh = meshMetaData[drawCalls[index].meshIndex];
+    MeshMetaData mesh = meshMetaData[partialDrawCalls[index].meshIndex];
+    PartialDrawCall pdrawCall = partialDrawCalls[index];
 
     drawCalls[index].indexCount = mesh.indexCount;
     drawCalls[index].instanceCount = 0;
     drawCalls[index].firstIndex = mesh.firstIndex;
     drawCalls[index].vertexOffset = mesh.vertexOffset;
+    drawCalls[index].firstInstance = pdrawCall.firstInstance;
+    drawCalls[index].materialIndex = pdrawCall.materialIndex;
+    drawCalls[index].meshIndex = pdrawCall.meshIndex;
 }

@@ -15,7 +15,7 @@ class RenderBuffer {
     vg::Flags<vg::BufferUsage> bufferUsage;
     std::vector<vg::Buffer> renderingBuffers;
     vg::Buffer stagingBuffer;
-    vg::Flags<BufferChange> bufferChangeFlag;
+    std::vector<vg::Flags<BufferChange>> bufferChangeFlag;
 
   public:
     RenderBuffer();
@@ -54,7 +54,7 @@ class RenderBuffer {
 
     int GetCapacity() const;
     int GetSize() const;
-    vg::Flags<BufferChange> GetChange() const;
+    vg::Flags<BufferChange> GetChange(int index) const;
 
     uint32_t Size(uint32_t regionID) const;
     uint32_t Alignment(uint32_t regionID) const;

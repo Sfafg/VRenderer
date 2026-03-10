@@ -30,6 +30,12 @@ struct RAIIGLFW {
     ~RAIIGLFW();
 };
 
+// TODO: LOD support.
+// TODO: MultiDrawIndirect.
+// TODO: Fix occlusion culling stability (probably reduction sampling).
+// TODO: Multiple windows support.
+// TODO: Optymize.
+
 GLFWwindow *CreateWindow();
 vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window);
 vg::Instance CreateInstance();
@@ -57,7 +63,6 @@ int main() {
     Renderer renderer(
         maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialArray, &batchManager}
     );
-    Material::materialArray = &materialArray;
     renderer.MakeCurrent();
 
     Material material(
@@ -89,25 +94,26 @@ int main() {
     glm::mat4 lightView = glm::lookAt(glm::vec3(100), glm::vec3(0), glm::vec3(0, 0, 1));
 
     Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)));
-    Debug::Reserve(&batchManager, "Cube", false, 100000);
-    for (int i = 0; i < 100000; i++) {
+    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 10000);
+    Debug::Reserve(&batchManager, "Cube", false, 1e5);
+    for (int i = 0; i < 1e5; i++) {
         Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-        Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)));
+        Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
     }
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
 
-        // static float t = 0;
-        // t += 0.01;
-        // Debug::color = glm::vec4(0, 0, 1, 0.5);
-        // Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
-        // Debug::color = glm::vec4(0, 1, 0, 0.5);
-        // Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
-        // Debug::color = glm::vec4(1, 0, 0, 0.5);
-        // Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
+        static float t = 0;
+        t += 0.01;
+        Debug::color = glm::vec4(0, 0, 1, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
+        Debug::color = glm::vec4(0, 1, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
+        Debug::color = glm::vec4(1, 0, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
 
+        // Debug::Reserve(&batchManager, "Cube", false, Debug::ObjectCount(&batchManager, "Cube", false));
         cameraRotation = GetRotation(window, cameraRotation, 0.001f);
         cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
 
@@ -115,7 +121,7 @@ int main() {
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
         );
 
-        // Debug::Frame();
+        Debug::Frame();
         renderer.RenderFrame(
             generalQueue, proj * view, cameraPos, nearPlane, farPlane,
             {.lightViewProjection = lightProj * lightView,
@@ -188,9 +194,11 @@ glm::vec3 GetMoveDirection(GLFWwindow *window, float speed) {
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) direction += glm::vec3(1, 0, 0);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) direction += glm::vec3(0, -1, 0);
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) speed *= 0.1;
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) speed *= 3;
 
     if (length(direction) > 0.0f) direction = normalize(direction);
-    return direction * speed * 0.1f;
+    return direction * speed * 0.3f;
 }
 
 glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed) {
@@ -209,8 +217,8 @@ glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed)
     if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) mouseDelta += glm::dvec2(1, 0);
     if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) roll -= 1;
     if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) roll += 1;
-    mouseDelta *= speed * 10;
-    roll *= speed * 10;
+    mouseDelta *= speed * 20;
+    roll *= speed * 20;
 
     // if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1))
     {

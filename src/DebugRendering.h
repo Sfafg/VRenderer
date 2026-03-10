@@ -30,7 +30,8 @@ class Debug {
     static void DrawFrustum(const glm::mat4 &view, const glm::mat4 &projection, int frameDuration = 1);
 
     static void Frame();
-    static void Reserve(BatchArray* batchArray, std::string meshName, bool transparent, int count);
+    static void Reserve(BatchArray *batchArray, std::string meshName, bool transparent, int count);
+    static int ObjectCount(BatchArray *batchArray, std::string meshName, bool transparent);
 
   private:
     static std::vector<RenderObject> objects;
