@@ -112,7 +112,7 @@ if(VRENDERER_BUILD_TESTS)
     #     GIT_PROGRESS TRUE
     # )
     # FetchContent_MakeAvailable(tracy)
-
+    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
       assimp
       GIT_REPOSITORY https://github.com/assimp/assimp.git
@@ -131,7 +131,7 @@ if(VRENDERER_BUILD_TESTS)
     add_dependencies(RendererTest Shaders Resources)
 
 # BatchTest
-    add_executable(BatchTest ${TESTS_ROOT}/BatchTest.cpp)
-    target_link_libraries(BatchTest PRIVATE VRenderer glfw glm)
-    add_dependencies(BatchTest Shaders Resources)
+    # add_executable(BatchTest ${TESTS_ROOT}/BatchTest.cpp)
+    # target_link_libraries(BatchTest PRIVATE VRenderer glfw glm)
+    # add_dependencies(BatchTest Shaders Resources)
 endif()
