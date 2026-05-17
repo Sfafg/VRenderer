@@ -14,6 +14,7 @@ set(SHADER_OUTPUT_DIR "${RESOURCES_OUTPUT_DIR}/shaders")
 set(CMAKE_CXX_STANDARD 23)
 
 file(MAKE_DIRECTORY ${TESTS_ROOT} ${SRC_ROOT} ${RESOURCES_ROOT} ${RESOURCES_OUTPUT_DIR} ${SHADER_ROOT} ${SHADER_OUTPUT_DIR})
+include(FetchContent)
 
 # Lib SHADERS
 find_program(GLSLC_EXECUTABLE glslc)
@@ -36,8 +37,18 @@ endforeach()
 
 add_custom_target(VRenderer_LibShaders ALL DEPENDS "${LIB_SHADER_DEPEND}")
 
+
+set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ZIP OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  assimp
+  GIT_REPOSITORY https://github.com/assimp/assimp.git
+  GIT_TAG master
+)
+FetchContent_MakeAvailable(assimp)
+
 # Library
-include(FetchContent)
 FetchContent_Declare(
   VGraphics
   GIT_REPOSITORY "https://github.com/Sfafg/VGraphics.git"
@@ -58,7 +69,7 @@ list(REMOVE_ITEM HEADER "${SRC_ROOT}/DebugRendering.h")
 
 add_library(VRenderer_VRenderer STATIC)
 add_dependencies(VRenderer_VRenderer VRenderer_LibShaders)
-target_link_libraries(VRenderer_VRenderer PUBLIC VGraphics glm)
+target_link_libraries(VRenderer_VRenderer PUBLIC VGraphics glm assimp)
 target_sources(VRenderer_VRenderer
     PRIVATE
         ${SRC}
@@ -116,16 +127,6 @@ if(VRENDERER_BUILD_TESTS)
         -DGLFW_BUILD_DOCS:BOOL=OFF
     )
     FetchContent_MakeAvailable(glfw)
-
-    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
-    set(ASSIMP_BUILD_ZIP OFF CACHE BOOL "" FORCE)
-    set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-      assimp
-      GIT_REPOSITORY https://github.com/assimp/assimp.git
-      GIT_TAG master
-    )
-    FetchContent_MakeAvailable(assimp)
 
 # VRenderer
     add_executable(VRenderer_Renderer ${TESTS_ROOT}/Source.cpp "${SRC_ROOT}/DebugRendering.cpp")
