@@ -3,6 +3,8 @@
 #include "assimp/scene.h"
 #include "assimp/postprocess.h"
 #include "Mesh.h"
+#include "Material.h"
+#include "RenderObject.h"
 
 namespace Load {
 enum class Attribute { Position, Normal, Color };
