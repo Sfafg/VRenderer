@@ -34,7 +34,7 @@ foreach(SHADER ${LIB_SHADERS})
     list(APPEND LIB_SHADER_DEPEND "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")
 endforeach()
 
-add_custom_target(LibShaders ALL DEPENDS "${LIB_SHADER_DEPEND}")
+add_custom_target(VRenderer_LibShaders ALL DEPENDS "${LIB_SHADER_DEPEND}")
 
 # Library
 include(FetchContent)
@@ -56,10 +56,10 @@ file(GLOB_RECURSE HEADER "${SRC_ROOT}/*.h")
 list(REMOVE_ITEM SRC "${SRC_ROOT}/DebugRendering.cpp")
 list(REMOVE_ITEM HEADER "${SRC_ROOT}/DebugRendering.h")
 
-add_library(VRenderer STATIC)
-add_dependencies(VRenderer LibShaders)
-target_link_libraries(VRenderer PUBLIC VGraphics glm)
-target_sources(VRenderer
+add_library(VRenderer_VRenderer STATIC)
+add_dependencies(VRenderer_VRenderer VRenderer_LibShaders)
+target_link_libraries(VRenderer_VRenderer PUBLIC VGraphics glm)
+target_sources(VRenderer_VRenderer
     PRIVATE
         ${SRC}
     PUBLIC
@@ -67,8 +67,8 @@ target_sources(VRenderer
         BASE_DIRS src
         FILES ${HEADER}
 )
-target_precompile_headers(VRenderer PUBLIC "${VGraphics_SOURCE_DIR}/src/VG/VG.h")
-target_include_directories(VRenderer PUBLIC
+target_precompile_headers(VRenderer_VRenderer PUBLIC "${VGraphics_SOURCE_DIR}/src/VG/VG.h")
+target_include_directories(VRenderer_VRenderer PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>
 )
@@ -88,7 +88,7 @@ if(VRENDERER_BUILD_TESTS)
         list(APPEND SHADER_DEPEND "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")
     endforeach()
 
-    add_custom_target(Shaders ALL DEPENDS "${SHADER_DEPEND}")
+    add_custom_target(VRenderer_Shaders ALL DEPENDS "${SHADER_DEPEND}")
 
 # RESOURCES
     file(GLOB_RECURSE RESOURCES "${RESOURCES_ROOT}/*.*")
@@ -104,7 +104,7 @@ if(VRENDERER_BUILD_TESTS)
         list(APPEND RESOURCE_DEPEND "${RESOURCES_OUTPUT_DIR}/${RESOURCE_NAME}")
     endforeach()
 
-    add_custom_target(Resources ALL DEPENDS ${RESOURCE_DEPEND})
+    add_custom_target(VRenderer_Resources ALL DEPENDS ${RESOURCE_DEPEND})
 
     FetchContent_Declare(
       glfw
@@ -128,12 +128,12 @@ if(VRENDERER_BUILD_TESTS)
     FetchContent_MakeAvailable(assimp)
 
 # VRenderer
-    add_executable(Renderer ${TESTS_ROOT}/Source.cpp "${SRC_ROOT}/DebugRendering.cpp")
-    target_link_libraries(Renderer PRIVATE VRenderer glfw glm assimp)
-    add_dependencies(Renderer Shaders Resources)
+    add_executable(VRenderer_Renderer ${TESTS_ROOT}/Source.cpp "${SRC_ROOT}/DebugRendering.cpp")
+    target_link_libraries(VRenderer_Renderer PRIVATE VRenderer_VRenderer glfw glm assimp)
+    add_dependencies(VRenderer_Renderer VRenderer_Shaders VRenderer_Resources)
 
 # RendererTest
-    add_executable(RendererTest ${TESTS_ROOT}/RendererTest.cpp)
-    target_link_libraries(RendererTest PRIVATE VRenderer glfw glm)
-    add_dependencies(RendererTest Shaders Resources)
+    add_executable(VRenderer_RendererTest ${TESTS_ROOT}/RendererTest.cpp)
+    target_link_libraries(VRenderer_RendererTest PRIVATE VRenderer_VRenderer glfw glm)
+    add_dependencies(VRenderer_RendererTest VRenderer_Shaders VRenderer_Resources)
 endif()
