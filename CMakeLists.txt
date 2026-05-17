@@ -11,12 +11,31 @@ set(RESOURCES_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources")
 set(SHADER_ROOT "${SRC_ROOT}/shaders")
 set(SHADER_OUTPUT_DIR "${RESOURCES_OUTPUT_DIR}/shaders")
 
-add_compile_options(-static-libstdc++)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
 set(CMAKE_CXX_STANDARD 23)
 
 file(MAKE_DIRECTORY ${TESTS_ROOT} ${SRC_ROOT} ${RESOURCES_ROOT} ${RESOURCES_OUTPUT_DIR} ${SHADER_ROOT} ${SHADER_OUTPUT_DIR})
-include_directories(/usr/include/minizip)
+
+# Lib SHADERS
+find_program(GLSLC_EXECUTABLE glslc)
+if(NOT GLSLC_EXECUTABLE)
+    message(FATAL_ERROR "glslc not found. Set GLSLC_EXECUTABLE manually or add to PATH.")
+endif()
+
+file(GLOB_RECURSE LIB_SHADERS "${SHADER_ROOT}/*.comp")
+
+foreach(SHADER ${LIB_SHADERS})
+    string(REPLACE "${SHADER_ROOT}/" "" SHADER_NAME "${SHADER}")
+    add_custom_command(
+        OUTPUT "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
+        COMMAND "${GLSLC_EXECUTABLE}" -g -O0 -Werror "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
+        DEPENDS "${SHADER}" "${LIB_SHADER_DEPEND}"
+        COMMENT "Compiling Shader: ${SHADER_NAME}.spv"
+    )
+    list(APPEND LIB_SHADER_DEPEND "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")
+endforeach()
+
+add_custom_target(LibShaders ALL DEPENDS "${LIB_SHADER_DEPEND}")
+
 # Library
 include(FetchContent)
 FetchContent_Declare(
@@ -38,7 +57,7 @@ list(REMOVE_ITEM SRC "${SRC_ROOT}/DebugRendering.cpp")
 list(REMOVE_ITEM HEADER "${SRC_ROOT}/DebugRendering.h")
 
 add_library(VRenderer STATIC)
-
+add_dependencies(VRenderer LibShaders)
 target_link_libraries(VRenderer PUBLIC VGraphics glm)
 target_sources(VRenderer
     PRIVATE
@@ -56,13 +75,7 @@ target_include_directories(VRenderer PUBLIC
 
 if(VRENDERER_BUILD_TESTS)
 # SHADERS
-    find_program(GLSLC_EXECUTABLE glslc)
-    if(NOT GLSLC_EXECUTABLE)
-        message(FATAL_ERROR "glslc not found. Set GLSLC_EXECUTABLE manually or add to PATH.")
-    endif()
-
-    file(GLOB_RECURSE SHADERS "${SHADER_ROOT}/*.vert" "${SHADER_ROOT}/*.frag" "${SHADER_ROOT}/*.comp")
-    file(GLOB_RECURSE SHADER_DEPEND "${SHADER_ROOT}/*.glsl")
+    file(GLOB_RECURSE SHADERS "${SHADER_ROOT}/*.vert" "${SHADER_ROOT}/*.frag")
 
     foreach(SHADER ${SHADERS})
         string(REPLACE "${SHADER_ROOT}/" "" SHADER_NAME "${SHADER}")
@@ -104,15 +117,9 @@ if(VRENDERER_BUILD_TESTS)
     )
     FetchContent_MakeAvailable(glfw)
 
-    # FetchContent_Declare(
-    #     tracy
-    #     GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-    #     GIT_TAG master
-    #     GIT_SHALLOW TRUE
-    #     GIT_PROGRESS TRUE
-    # )
-    # FetchContent_MakeAvailable(tracy)
     set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_BUILD_ZIP OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
     FetchContent_Declare(
       assimp
       GIT_REPOSITORY https://github.com/assimp/assimp.git
@@ -122,16 +129,11 @@ if(VRENDERER_BUILD_TESTS)
 
 # VRenderer
     add_executable(Renderer ${TESTS_ROOT}/Source.cpp "${SRC_ROOT}/DebugRendering.cpp")
-    target_link_libraries(Renderer PRIVATE VRenderer glfw glm assimp )#TracyClient
+    target_link_libraries(Renderer PRIVATE VRenderer glfw glm assimp)
     add_dependencies(Renderer Shaders Resources)
 
 # RendererTest
     add_executable(RendererTest ${TESTS_ROOT}/RendererTest.cpp)
     target_link_libraries(RendererTest PRIVATE VRenderer glfw glm)
     add_dependencies(RendererTest Shaders Resources)
-
-# BatchTest
-    # add_executable(BatchTest ${TESTS_ROOT}/BatchTest.cpp)
-    # target_link_libraries(BatchTest PRIVATE VRenderer glfw glm)
-    # add_dependencies(BatchTest Shaders Resources)
 endif()
