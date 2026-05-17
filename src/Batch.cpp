@@ -135,8 +135,9 @@ uint BatchArray::_Add(Mesh *mesh, Material *material, uint objectByteSize) {
     batchBuffer.Allocate(sizeof(Batch), sizeof(Batch));
     objectBuffer.Allocate(0, objectByteSize);
 
+    int alignment = objectBuffer.Alignment(batches.size());
     Batch batch;
-    batch.objectDataOffset = objectBuffer.Offset(batches.size()) / objectBuffer.Alignment(batches.size());
+    batch.objectDataOffset = alignment == 0 ? 0 : objectBuffer.Offset(batches.size()) / alignment;
     batch.firstObjectIndex = totalObjects;
     batch.objectDataElementSize = objectByteSize;
     batch.drawCall = index;

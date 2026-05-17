@@ -30,10 +30,11 @@ struct RAIIGLFW {
     ~RAIIGLFW();
 };
 
-// TODO: LOD support.
+// Fix: LOD support.
+// Fix: Fix occlusion culling stability (probably reduction sampling).
 // TODO: MultiDrawIndirect.
-// TODO: Fix occlusion culling stability (probably reduction sampling).
 // TODO: Multiple windows support.
+// TODO: Add Debug Rendering as part of library.
 // TODO: Optymize.
 
 GLFWwindow *CreateWindow();
