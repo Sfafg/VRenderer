@@ -1,7 +1,6 @@
 #include "AssimpLoader.h"
 #include "Batch.h"
 #include "ByteView.h"
-#include "DebugRendering.h"
 #include "GPURenderSystem.h"
 #include "HiZBuffer.h"
 #include "Material.h"

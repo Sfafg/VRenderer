@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.30.1)
 project(VRenderer)
 set(CMAKE_CXX_STANDARD 23)
 
-option(VRENDERER_BUILD_TESTS "Build tests" ON)
+option(VRENDERER_BUILD_TESTS "Build tests" OFF)
 
 set(TESTS_ROOT "${PROJECT_SOURCE_DIR}/tests")
 set(SRC_ROOT "${PROJECT_SOURCE_DIR}/src")
