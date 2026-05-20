@@ -1,223 +1,231 @@
+#include "Handle.h"
+
 #include "glm/ext/quaternion_trigonometric.hpp"
+#include "glm/fwd.hpp"
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+#include <fstream>
+extern "C" {
+typedef struct VkInstance_T *VkInstance;
+typedef struct VkSurfaceKHR_T *VkSurfaceKHR;
+int glfwCreateWindowSurface(VkInstance instance, GLFWwindow *window, const void *allocator, VkSurfaceKHR *surface);
+}
 #include <iostream>
 #define GLM_ENABLE_EXPERIMENTAL
 #include "Renderer.h"
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <math.h>
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
-extern "C" {
-typedef struct VkInstance_T *VkInstance;
-typedef struct VkSurfaceKHR_T *VkSurfaceKHR;
-int glfwCreateWindowSurface(VkInstance instance, GLFWwindow *window, const void *allocator, VkSurfaceKHR *surface);
-}
-#include "RenderBuffer.h"
+#include "DebugRendering.h"
+#include "AssimpLoader.h"
 
 float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (max - min) + min; }
 
-vg::Queue generalQueue;
-vg::Device renderDevice;
-void InitVulkan() {
-    vg::instance = new vg::Instance({}, [](vg::MessageSeverity severity, const char *message) {
-        if (severity < vg::MessageSeverity::Warning) return;
-        std::cout << message << '\n';
-    });
+struct RAIIGLFW {
+    RAIIGLFW();
+    ~RAIIGLFW();
+};
 
+GLFWwindow *CreateWindow();
+vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window);
+vg::Instance CreateInstance();
+vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue);
+glm::vec3 GetMoveDirection(GLFWwindow *window, float speed = 0.4f);
+glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed = 0.001f);
+
+int main() {
+    RAIIGLFW raiiGLFW;
+    auto window = CreateWindow();
+    int w, h;
+    glfwGetFramebufferSize(window, &w, &h);
+
+    auto instance = CreateInstance();
+    vg::instance = &instance;
+    auto windowSurface = CreateWindowSurface(window);
+    auto generalQueue = vg::Queue({vg::QueueType::General}, 1.0f);
+    auto renderDevice = CreateDevice(windowSurface, generalQueue);
+    vg::currentDevice = &renderDevice;
+
+    const uint maxFramesInFlight = 2;
+    MeshArray meshManager(maxFramesInFlight);
+    MaterialArray materialArray(maxFramesInFlight);
+    BatchArray batchManager(maxFramesInFlight, 50);
+    Renderer renderer(
+        maxFramesInFlight, &generalQueue, windowSurface, w, h, {&meshManager, &materialArray, &batchManager}
+    );
+    renderer.MakeCurrent();
+
+    Material material(
+        false, "resources/shaders/shader.vert.spv", "resources/shaders/shader.frag.spv",
+        vg::VertexLayout(
+            {{0, sizeof(float) * 6}, {1, sizeof(uint), vg::InputRate::Instance}},
+            {{0, 0, vg::Format::RGB32SFLOAT},
+             {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
+             {2, 1, vg::Format::R32UINT}}
+        ),
+        {.cullMode = vg::CullMode::Back}, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f))
+    );
+    Mesh mesh(
+        glm::vec3(-1), glm::vec3(1), 3,
+        new glm::vec3[]{glm::vec3(-1, -1, -1), glm::vec3(-1, -1, 1), glm::vec3(-1, 1, 1)}, 3, new int[]{0, 1, 2}
+    );
+    Debug::Init();
+
+    std::vector<Material> materials;
+    std::vector<Mesh> meshes;
+    std::vector<RenderObject> renderObjects;
+    RenderObject ro(&mesh, &material);
+    Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
+
+    glm::vec3 cameraPos(0, -1, 0);
+    glm::quat cameraRotation(1, 0, 0, 0);
+
+    float nearPlane = 0.01f;
+    float farPlane = 200.0f;
+    glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, nearPlane, farPlane);
+    proj[1][1] *= -1;
+
+    glm::mat4 lightProj = glm::ortho(-100.f, 140.f, -100.f, 100.f, -400.f, 400.f);
+    glm::mat4 lightView = glm::lookAt(glm::vec3(100), glm::vec3(0), glm::vec3(0, 0, 1));
+
+    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 10000);
+    Debug::Reserve(&batchManager, "Cube", false, 1e5);
+    for (int i = 0; i < 1e5; i++) {
+        Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+        Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    }
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
+
+        static float t = 0;
+        t += 0.01;
+        Debug::color = glm::vec4(0, 0, 1, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
+        Debug::color = glm::vec4(0, 1, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
+        Debug::color = glm::vec4(1, 0, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
+
+        // Debug::Reserve(&batchManager, "Cube", false, Debug::ObjectCount(&batchManager, "Cube", false));
+        cameraRotation = GetRotation(window, cameraRotation, 0.001f);
+        cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
+
+        glm::mat4 view = glm::lookAt(
+            cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
+        );
+
+        Debug::Frame();
+        renderer.RenderFrame(
+            generalQueue, proj * view, cameraPos, nearPlane, farPlane,
+            {.lightViewProjection = lightProj * lightView,
+             .lightDirection = glm::vec3(-1),
+             .lightColor = glm::vec3(1, 1, 1)},
+            !glfwGetKey(window, GLFW_KEY_SPACE)
+        );
+    }
+    Debug::Destroy();
+}
+
+RAIIGLFW::RAIIGLFW() {
+#ifndef NDEBUG
+#ifdef __linux__
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
+#endif
+    glfwInit();
+}
+
+RAIIGLFW::~RAIIGLFW() { glfwTerminate(); }
+
+GLFWwindow *CreateWindow() {
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    return glfwCreateWindow(1920, 1080, "VRendererTest", nullptr, nullptr);
+}
+
+vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window) {
+    vg::SurfaceHandle windowSurface;
+    glfwCreateWindowSurface(*(VkInstance *)vg::instance, (GLFWwindow *)window, nullptr, (VkSurfaceKHR *)&windowSurface);
+    return windowSurface;
+}
+vg::Instance CreateInstance() {
+    uint32_t glfwExtensionCount = 0;
+    const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    std::vector<const char *> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    extensions.push_back("VK_KHR_get_physical_device_properties2");
+    return vg::Instance(extensions, [](vg::MessageSeverity severity, const char *message) {
+        static bool first = true;
+        std::ofstream logFile("logs.txt", first ? std::ofstream::trunc : std::ofstream::app);
+        first = false;
+        switch (severity) {
+        case vg::MessageSeverity::Info: logFile << "Info: "; break;
+        case vg::MessageSeverity::Warning: logFile << "Warning: "; break;
+        case vg::MessageSeverity::Error: logFile << "Error: "; break;
+        default: break;
+        }
+        logFile << message << "\n\n";
+
+        if (severity < vg::MessageSeverity::Warning) return;
+        std::cout << '\n' << message << '\n' << '\n';
+    });
+}
+vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue) {
     vg::DeviceFeatures deviceFeatures(
         {vg::Feature::LogicOp, vg::Feature::SampleRateShading, vg::Feature::FillModeNonSolid,
          vg::Feature::MultiDrawIndirect}
     );
-    generalQueue = vg::Queue({vg::QueueType::Transfer}, 1.0f);
-    renderDevice = vg::Device(
-        {&generalQueue}, {}, deviceFeatures,
+    return vg::Device(
+        {&generalQueue}, {"VK_KHR_swapchain", "VK_EXT_sampler_filter_minmax"}, deviceFeatures, windowSurface,
         [](auto id, auto supportedQueues, auto supportedExtensions, auto type, vg::DeviceLimits limits,
            vg::DeviceFeatures features) { return (type == vg::DeviceType::Dedicated); }
     );
-    vg::currentDevice = &renderDevice;
+}
+glm::vec3 GetMoveDirection(GLFWwindow *window, float speed) {
+    glm::vec3 direction(0);
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) direction += glm::vec3(0, 0, 1);
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) direction += glm::vec3(0, 0, -1);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) direction += glm::vec3(-1, 0, 0);
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) direction += glm::vec3(1, 0, 0);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) direction += glm::vec3(0, -1, 0);
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) direction += glm::vec3(0, 1, 0);
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) speed *= 0.1;
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) speed *= 3;
+
+    if (length(direction) > 0.0f) direction = normalize(direction);
+    return direction * speed * 0.3f;
 }
 
-void Check(bool condition, const char *msg) {
-    if (!condition) {
-        std::cerr << "BŁĄD:  " << msg << std::endl;
-        // std::terminate();
-    }
-}
+glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed) {
+    static glm::dvec2 lastMouseP(-100, -100);
+    if (lastMouseP == glm::dvec2(-100, -100)) glfwGetCursorPos(window, &lastMouseP.x, &lastMouseP.y);
 
-void TestRenderBuffer() {
-    constexpr int initialCapacity = 1024;
-    int allocSize = 728;
-    int alignment = 16;
-    // test 1: Dealokacja wszystkich regionów w RenderBuffer
-    /*
-    RenderBuffer rbzero(initialCapacity, vg::BufferUsage::VertexBuffer);
-    Check(rbzero.GetCapacity() >= initialCapacity, "Niepoprawna początkowa pojemność");
+    glm::dvec2 mouseP;
+    glfwGetCursorPos(window, &mouseP.x, &mouseP.y);
+    glm::dvec2 mouseDelta = mouseP - lastMouseP;
+    lastMouseP = mouseP;
+    mouseDelta = glm::dvec2(0, 0);
+    float roll = 0;
+    if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) mouseDelta -= glm::dvec2(0, 1);
+    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) mouseDelta += glm::dvec2(0, 1);
+    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) mouseDelta -= glm::dvec2(1, 0);
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) mouseDelta += glm::dvec2(1, 0);
+    if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) roll -= 1;
+    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) roll += 1;
+    mouseDelta *= speed * 20;
+    roll *= speed * 20;
 
-    std::vector<uint32_t> regions;
-    for (int i = 0; i < 5; ++i) { regions.push_back(rbzero.Allocate(allocSize, alignment)); }
-
-    for (auto &region : regions) { rbzero.Deallocate(std::move(region)); }
-    Check(rbzero.GetSize() == 0, "sraka po dealokacji");
-    */
-    // test 2: Podstawowe operacje na RenderBuffer
-    RenderBuffer rb(initialCapacity, vg::BufferUsage::VertexBuffer);
-    Check(rb.GetCapacity() >= initialCapacity, "Niepoprawna początkowa pojemność");
-    Check(rb.GetCapacity() >= initialCapacity, "zle przypisuje pojemnosc");
-    Check(rb.GetSize() == 0, "poczatkowy rozmiar ma byc 0");
-
-    auto region = rb.Allocate(allocSize, alignment);
-
-    // Access internal vectors directly since accessor methods don't exist
-    Check(rb.Size(region) == allocSize, "zle przypisuje rozmiar regionu");
-    Check(rb.Alignment(region) == alignment, "zle przypisuje alignment regionu");
-    Check(rb.Offset(region) % alignment == 0, "offset regionu nie jest aligned");
-    Check(rb.GetSize() >= allocSize, "zle przypisuje rozmiar render bufora po alokacji regionu");
-
-    printf(
-        "Region %u allocated with size %u, alignment %u, offset %u\n", region, rb.Size(region), rb.Alignment(region),
-        rb.Offset(region)
-    );
-
-    // test 3: Sprawdzenie poprawności alokacji i zapisu danych do regionu
-    int random_size = 100;
-    std::vector<uint8_t> data(random_size);
-    for (int i = 0; i < random_size; i++) {
-        data[i] = static_cast<uint8_t>(i % 256); // cokolwiek zeby bylo idk
+    // if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1))
+    {
+        cameraRotation = glm::angleAxis((float)-mouseDelta.x, cameraRotation * glm::vec3(0, 0, 1)) * cameraRotation;
+        cameraRotation = glm::angleAxis((float)-mouseDelta.y, cameraRotation * glm::vec3(1, 0, 0)) * cameraRotation;
+        cameraRotation = glm::angleAxis((float)-roll, cameraRotation * glm::vec3(0, 1, 0)) * cameraRotation;
+        cameraRotation = glm::normalize(cameraRotation);
     }
 
-    rb.Write(region, data.data(), random_size);
-
-    printf("Data written to region %u: ", region);
-
-    // odczytujemy dane z backBuffer i sprawdzamy czy są poprawne
-    std::vector<uint8_t> readData(random_size);
-    uint32_t readSize = rb.Read(region, readData.data(), random_size);
-    assert(readSize == random_size && "Read size does not match written size");
-
-    printf("Written data: ");
-    for (int i = 0; i < random_size; i++) { printf("%02X ", data[i]); }
-    printf("\n");
-
-    printf("Read data:    ");
-    for (int i = 0; i < random_size; i++) { printf("%02X ", readData[i]); }
-    printf("\n");
-
-    Check(std::memcmp(readData.data(), data.data(), random_size) == 0, "Dane nie zostaly poprawnie zapisane");
-
-    // test 5: Częściowe wpisanie danych (dalej)
-    uint32_t partialOffset = 500;
-    uint32_t partialSize = 20;
-    std::vector<uint8_t> partialData = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
-                                        0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14};
-
-    rb.Write(region, partialData.data(), partialSize, partialOffset);
-    // odczytujemy czesciowe dane i sprawdzamy czy są poprawne
-    std::vector<uint8_t> partialReadData(partialSize);
-    rb.Read(region, partialReadData.data(), partialSize, partialOffset);
-    Check(
-        std::memcmp(partialReadData.data(), partialData.data(), partialSize) == 0,
-        "Wpisywanie częściowych danych nie działa"
-    );
-
-    // Test 6: Realokacja z zachowaniem danych
-    std::cout << "[TEST] Data BEFORE realloc:  ";
-    for (int i = 0; i < random_size; i++) std::cout << (int)data[i] << " ";
-    std::cout << std::endl;
-
-    uint32_t newSize = static_cast<uint32_t>(allocSize * 1.2); // zwiększ rozmiar
-    rb.Reallocate(region, newSize);
-
-    // Sprawdź czy dane zostały zachowane
-    std::vector<uint8_t> reallocReadData(random_size);
-    uint32_t readSizeAfterRealloc = rb.Read(region, reallocReadData.data(), random_size);
-    printf("Read size after realloc: %u\n", readSizeAfterRealloc);
-
-    std::cout << "[TEST] Data after realloc:  ";
-    for (int i = 0; i < random_size; i++) std::cout << (int)reallocReadData[i] << " ";
-    std::cout << std::endl;
-
-    Check(std::memcmp(reallocReadData.data(), data.data(), random_size) == 0, "Realokacja nie zachowala danych");
-    Check(rb.Size(region) == newSize, "Realokacja nie zmieniła rozmiaru regionu");
-    Check(rb.Offset(region) % alignment == 0, "Offset po realokacji nie jest aligned");
-
-    // Test 7: Alokacja kolejnego regionu po realokacji (sprawdzenie paddingu)
-    uint32_t region2 = rb.Allocate(100, 32);
-    Check(rb.Offset(region2) % 32 == 0, "Drugi region nie jest poprawnie aligned");
-    Check(rb.Offset(region2) >= rb.Offset(region) + rb.Size(region), "Drugi region nakłada się na pierwszy");
-
-    // Sprawdź padding między regionami
-    uint32_t expectedPadding = rb.GetPadding(region2, rb.Offset(region) + rb.Size(region));
-    uint32_t actualGap = rb.Offset(region2) - (rb.Offset(region) + rb.Size(region));
-    Check(actualGap == expectedPadding, "Niepoprawny padding między regionami");
-
-    printf("Region 1: offset=%u, size=%u, alignment= %u\n", rb.Offset(region), rb.Size(region), rb.Alignment(region));
-    printf(
-        "Region 2: offset=%u, size=%u, alignment= %u\n", rb.Offset(region2), rb.Size(region2), rb.Alignment(region2)
-    );
-    printf("Gap between regions: %u (expected padding: %u)\n", actualGap, expectedPadding);
-
-    // Test 8: Erase z zachowaniem alignmentów
-    std::vector<uint8_t> testData(50);
-    for (int i = 0; i < 50; i++) { testData[i] = static_cast<uint8_t>(200 + i); }
-    rb.Write(region2, testData.data(), 50);
-
-    // Sprawdź dane przed Erase
-    std::vector<uint8_t> beforeErase(50);
-    rb.Read(region2, beforeErase.data(), 50);
-    Check(std::memcmp(beforeErase.data(), testData.data(), 50) == 0, "Dane nie zostały zapisane przed Erase");
-
-    // Usuń część danych z pierwszego regionu
-    rb.Erase(region, 100, 200); // usuń 100 bajtów od pozycji 200
-
-    // Sprawdź czy drugi region wciąż ma poprawne dane i alignment
-    std::vector<uint8_t> afterErase(50);
-    rb.Read(region2, afterErase.data(), 50);
-    Check(std::memcmp(afterErase.data(), testData.data(), 50) == 0, "Erase zniszczył dane w innych regionach");
-    Check(rb.Offset(region2) % rb.Alignment(region2) == 0, "Erase naruszył alignment drugiego regionu");
-    Check(rb.Size(region) == newSize - 100, "Erase nie zmniejszył rozmiaru regionu");
-
-    printf(
-        "After Erase - Region 1: offset=%u, size=%u, alignment= %u\n", rb.Offset(region), rb.Size(region),
-        rb.Alignment(region)
-    );
-    printf(
-        "After Erase - Region 2: offset=%u, size=%u, alignment= %u\n", rb.Offset(region2), rb.Size(region2),
-        rb.Alignment(region2)
-    );
-
-    // Test 9: Dealokacja ze sprawdzeniem paddingu
-
-    uint32_t region3 = rb.Allocate(64, 64);
-    uint32_t oldOffset2 = rb.Offset(region2);
-    uint32_t oldOffset3 = rb.Offset(region3);
-
-    printf("Before Deallocate - Region 2: offset=%u, Region 3: offset=%u\n", oldOffset2, oldOffset3);
-
-    rb.Deallocate(region2); // usuń środkowy region
-
-    // po usunieciu region2, region3 powinien się przesunąć na miejsce region2, czyli 1
-    Check(rb.Offset(region2) % rb.Alignment(region2) == 0, "Dealokacja naruszyla alignment pozostałego regionu");
-    Check(rb.Offset(region2) < oldOffset3, "Region nie został przesunięty po dealokacji");
-
-    printf("After Deallocate - Region 3: offset=%u (was %u)\n", rb.Offset(region2), oldOffset3);
-
-    // Test 10: Rezerwacja większej pojemności
-    int biggerCapacity = initialCapacity * 4;
-    int oldCapacity = rb.GetCapacity();
-    rb.Reserve(biggerCapacity);
-    Check(rb.GetCapacity() >= biggerCapacity, "Rezerwacja większej pojemności nie działa");
-
-    std::cout << "💗💗💗💗💗 All tests passed! 💗💗💗💗💗" << std::endl;
-}
-
-int main() {
-    InitVulkan();
-    RenderBuffer renderBuffer(128, vg::BufferUsage::StorageBuffer);
-    TestRenderBuffer();
-
-    delete vg::instance;
+    return cameraRotation;
 }

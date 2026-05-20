@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.30.1)
 project(VRenderer)
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_LINKER_TYPE LLD)
+set(CMAKE_CXX_STANDARD 23)
 
 option(VRENDERER_BUILD_TESTS "Build tests" OFF)
 
@@ -11,10 +13,25 @@ set(RESOURCES_OUTPUT_DIR "${CMAKE_BINARY_DIR}/resources")
 set(SHADER_ROOT "${SRC_ROOT}/shaders")
 set(SHADER_OUTPUT_DIR "${RESOURCES_OUTPUT_DIR}/shaders")
 
-set(CMAKE_CXX_STANDARD 23)
 
 file(MAKE_DIRECTORY ${TESTS_ROOT} ${SRC_ROOT} ${RESOURCES_ROOT} ${RESOURCES_OUTPUT_DIR} ${SHADER_ROOT} ${SHADER_OUTPUT_DIR})
 include(FetchContent)
+
+# Lib RESOURCES
+file(GLOB_RECURSE LIB_RESOURCES "${RESOURCES_ROOT}/*.*")
+
+foreach(RESOURCE ${LIB_RESOURCES})
+    string(REPLACE "${RESOURCES_ROOT}/" "" RESOURCE_NAME "${RESOURCE}")
+    add_custom_command(
+        OUTPUT "${RESOURCES_OUTPUT_DIR}/${RESOURCE_NAME}"
+        COMMAND ${CMAKE_COMMAND} -E copy "${RESOURCE}" "${RESOURCES_OUTPUT_DIR}/${RESOURCE_NAME}"
+        DEPENDS "${RESOURCE}"
+        COMMENT "Copying resource: ${RESOURCE_NAME}"
+    )
+    list(APPEND LIB_RESOURCE_DEPEND "${RESOURCES_OUTPUT_DIR}/${RESOURCE_NAME}")
+endforeach()
+
+add_custom_target(VRenderer_LibResources ALL DEPENDS ${RESOURCE_DEPEND})
 
 # Lib SHADERS
 find_program(GLSLC_EXECUTABLE glslc)
@@ -64,8 +81,6 @@ FetchContent_MakeAvailable(glm)
 
 file(GLOB_RECURSE SRC "${SRC_ROOT}/*.cpp")
 file(GLOB_RECURSE HEADER "${SRC_ROOT}/*.h")
-list(REMOVE_ITEM SRC "${SRC_ROOT}/DebugRendering.cpp")
-list(REMOVE_ITEM HEADER "${SRC_ROOT}/DebugRendering.h")
 
 add_library(VRenderer_VRenderer STATIC)
 add_dependencies(VRenderer_VRenderer VRenderer_LibShaders)
@@ -129,7 +144,7 @@ if(VRENDERER_BUILD_TESTS)
     FetchContent_MakeAvailable(glfw)
 
 # VRenderer
-    add_executable(VRenderer_Renderer ${TESTS_ROOT}/Source.cpp "${SRC_ROOT}/DebugRendering.cpp")
+    add_executable(VRenderer_Renderer ${TESTS_ROOT}/Source.cpp)
     target_link_libraries(VRenderer_Renderer PRIVATE VRenderer_VRenderer glfw glm assimp)
     add_dependencies(VRenderer_Renderer VRenderer_Shaders VRenderer_Resources)
 

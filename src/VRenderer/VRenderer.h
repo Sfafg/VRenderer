@@ -1,4 +1,6 @@
+#pragma once
 #include "AssimpLoader.h"
+#include "DebugRendering.h"
 #include "Batch.h"
 #include "ByteView.h"
 #include "GPURenderSystem.h"
@@ -8,3 +10,14 @@
 #include "RenderBuffer.h"
 #include "RenderObject.h"
 #include "Renderer.h"
+
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <math.h>
+#include "glm/ext/quaternion_trigonometric.hpp"
+#include "glm/fwd.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>

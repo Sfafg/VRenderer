@@ -1,27 +1,13 @@
-#include "Handle.h"
-
-#include "glm/ext/quaternion_trigonometric.hpp"
-#include "glm/fwd.hpp"
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <fstream>
+#include <iostream>
+#include "VRenderer/VRenderer.h"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-#include <fstream>
 extern "C" {
 typedef struct VkInstance_T *VkInstance;
 typedef struct VkSurfaceKHR_T *VkSurfaceKHR;
 int glfwCreateWindowSurface(VkInstance instance, GLFWwindow *window, const void *allocator, VkSurfaceKHR *surface);
 }
-#include <iostream>
-#define GLM_ENABLE_EXPERIMENTAL
-#include "Renderer.h"
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtx/quaternion.hpp>
-#include <math.h>
-#include "DebugRendering.h"
-#include "AssimpLoader.h"
 
 float randf(float min = 0, float max = 1) { return rand() / (float)RAND_MAX * (max - min) + min; }
 
@@ -31,7 +17,6 @@ struct RAIIGLFW {
 };
 
 // Fix: LOD support.
-// Fix: Fix occlusion culling stability (probably reduction sampling).
 // TODO: MultiDrawIndirect.
 // TODO: Multiple windows support.
 // TODO: Add Debug Rendering as part of library.
@@ -173,7 +158,7 @@ vg::Instance CreateInstance() {
         logFile << message << "\n\n";
 
         if (severity < vg::MessageSeverity::Warning) return;
-        std::cout << '\n' << message << '\n' << '\n';
+        std::cout << '\n' << message << '\n' << '\n' << '\n' << '\n' << '\n';
     });
 }
 vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue) {
