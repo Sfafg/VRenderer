@@ -72,8 +72,6 @@ class BatchArray {
     void _ReserveObjects(uint batchIndex, uint objectCount);
     void _ShrinkToFit(uint batchIndex);
 
-    uint AddTransparentBatch(Mesh *mesh, Material *material, uint objectByteSize);
-
     uint _GetObjectCapacity(uint batchIndex);
     uint _GetObjectCount(uint batchIndex);
 
@@ -81,9 +79,6 @@ class BatchArray {
     uint GetDrawCall(Mesh *mesh, Material *material);
     void InsertDrawCall(uint index, Mesh *mesh, Material *material);
     void DeleteDrawCall(uint id);
-
-    // uint AddOrGetDrawCall(Mesh *mesh, Material *material);
-    // uint AddOrGetTransparentDrawCall(Mesh *mesh, Material *material);
 
     friend RenderObject;
     void AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize);

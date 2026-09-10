@@ -108,10 +108,11 @@ void main() {
 
     // Lod selection.
     if (batch.lods[0] != -1U) {
-        uint lodCount = 1 + uint(batch.lods[1] != -1U) + uint(batch.lods[2] != -1U) + uint(batch.lods[3] != -1U);
         // TODO: Add dedicated buffer for transformation matrices and remove object data element size.
-        uint lodIndex = min(lodCount, uint(GetCameraDistance(batch, objectID, cameraPosition) / 100 * lodCount));
-        drawCall = batch.lods[lodIndex];
+        uint lodCount = 1 + 1 + uint(batch.lods[1] != -1U) + uint(batch.lods[2] != -1U) + uint(batch.lods[3] != -1U);
+        uint lodIndex =
+            min(lodCount, uint(pow(GetCameraDistance(batch, objectID, cameraPosition) / farPlane, 0.9) * lodCount));
+        if (lodIndex != 0) drawCall = batch.lods[lodIndex - 1];
     }
 
     // Visibility check.

@@ -34,6 +34,8 @@ class RenderObject {
     void ReadData(void *data);
     template <typename T> T ReadData();
 
+    void SetLOD(const std::vector<std::tuple<class Mesh *, class Material *>> &lods);
+
     static void Reserve(class Mesh *mesh, class Material *material, uint objectCount, uint objectSize);
     static void ShrinkToFit(class Mesh *mesh, class Material *material);
     static void SetLOD(

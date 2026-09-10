@@ -60,6 +60,10 @@ void RenderObject::ReadData(void *data) {
     );
 }
 
+void RenderObject::SetLOD(const std::vector<std::tuple<class Mesh *, class Material *>> &lods) {
+    BatchArray::SetLOD(batchIndex, lods);
+}
+
 void RenderObject::Reserve(class Mesh *mesh, class Material *material, uint objectCount, uint objectSize) {
     if (!BatchArray::Exists(mesh, material)) BatchArray::Add(mesh, material, objectSize);
     uint id = BatchArray::Get(mesh, material);

@@ -85,7 +85,7 @@ void main() {
     vec3 specular = specularStrength * spec * lightColor;
 
     vec3 lightLocalFragPos = fragLightPosition.xyz / fragLightPosition.w;
-    const int resolution = 2;
+    const int resolution = 4;
     float shadowDepth = 0;
     int inShadow = 0;
     for (int i = -resolution; i <= resolution; i++) {

@@ -16,7 +16,6 @@ struct RAIIGLFW {
     ~RAIIGLFW();
 };
 
-// Fix: LOD support.
 // TODO: MultiDrawIndirect.
 // TODO: Multiple windows support.
 // TODO: Add Debug Rendering as part of library.
@@ -59,14 +58,52 @@ int main() {
              {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
              {2, 1, vg::Format::R32UINT}}
         ),
-        {.cullMode = vg::CullMode::Back}, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f))
+        {.cullMode = vg::CullMode::Back}, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(0.0f, 1.0f, 0.0f, 1.0f))
     );
+
+    Material materialLOD1(&material, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(0.5f, 1.0f, 0.5f, 1.0f)));
+    Material materialLOD2(&material, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 0.7f, 0.7f, 1.0f)));
+    Material materialLOD3(&material, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 0.3f, 0.3f, 1.0f)));
+    Material materialLOD4(&material, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)));
+
     Debug::Init();
 
     std::vector<Material> materials;
     std::vector<Mesh> meshes;
     std::vector<RenderObject> renderObjects;
-    Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
+    // Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
+
+    Mesh monkey = std::move(Load::Meshes("resources/Monkey_LOD1.fbx")[0]);
+    Mesh monkeyLOD1 = std::move(Load::Meshes("resources/Monkey_LOD2.fbx")[0]);
+    Mesh monkeyLOD2 = std::move(Load::Meshes("resources/Monkey_LOD2.fbx")[0]);
+    Mesh monkeyLOD3 = std::move(Load::Meshes("resources/Monkey_LOD3.fbx")[0]);
+    Mesh monkeyLOD4 = std::move(Load::Meshes("resources/Monkey_LOD4.fbx")[0]);
+
+    BatchArray::SetLOD(
+        BatchArray::Add(&monkey, &material, sizeof(glm::mat4)), {{&monkeyLOD1, &materialLOD1},
+                                                                 {&monkeyLOD2, &materialLOD2},
+                                                                 {&monkeyLOD3, &materialLOD3},
+                                                                 {&monkeyLOD4, &materialLOD4}}
+    );
+
+    int monkeyCount = 10'000;
+    BatchArray::ReserveObjects(BatchArray::Get(&monkey, &material), monkeyCount);
+    for (int i = 0; i < monkeyCount; i++) {
+        glm::vec3 pos(
+            (i % (int)sqrt(monkeyCount) - sqrt(monkeyCount) / 2) * 3,
+            (i / floor(sqrt(monkeyCount)) - sqrt(monkeyCount)) * 3, 0
+        );
+        glm::mat4 transform = glm::translate(glm::mat4(1), pos);
+        renderObjects.emplace_back(RenderObject(&monkey, &material, transform));
+    }
+
+    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 10);
+    Debug::Reserve(&batchManager, "Cube", false, 1e2);
+    for (int i = 0; i < 1e2; i++) {
+        Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+        Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 10);
+    }
 
     glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);
@@ -79,25 +116,18 @@ int main() {
     glm::mat4 lightProj = glm::ortho(-100.f, 140.f, -100.f, 100.f, -400.f, 400.f);
     glm::mat4 lightView = glm::lookAt(glm::vec3(100), glm::vec3(0), glm::vec3(0, 0, 1));
 
-    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 10000);
-    Debug::Reserve(&batchManager, "Cube", false, 1e5);
-    for (int i = 0; i < 1e5; i++) {
-        Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-        Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
-    }
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
 
         static float t = 0;
         t += 0.01;
-        Debug::color = glm::vec4(0, 0, 1, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
-        Debug::color = glm::vec4(0, 1, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
-        Debug::color = glm::vec4(1, 0, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
+        // Debug::color = glm::vec4(0, 0, 1, 0.5);
+        // Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
+        // Debug::color = glm::vec4(0, 1, 0, 0.5);
+        // Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
+        // Debug::color = glm::vec4(1, 0, 0, 0.5);
+        // Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
 
         // Debug::Reserve(&batchManager, "Cube", false, Debug::ObjectCount(&batchManager, "Cube", false));
         cameraRotation = GetRotation(window, cameraRotation, 0.001f);

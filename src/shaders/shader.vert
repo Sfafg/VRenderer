@@ -40,12 +40,13 @@ void main() {
     DrawCall drawCall = drawCalls[drawIdOffset];
     mat4 model = objectData[objectIndex];
     Material material = materials[drawCall.materialIndex];
+    vec3 vertexPosition = aPosition;
 
-    gl_Position = cameraViewProjection * model * vec4(aPosition, 1);
+    gl_Position = cameraViewProjection * model * vec4(vertexPosition, 1);
     color = vec4(material.color);
     normal = normalize(mat3(transpose(inverse(model))) * aNormal);
     roughness = material.roughness;
-    fragPosition = vec3(model * vec4(aPosition, 1));
-    fragLightPosition = lightViewProjection * model * vec4(aPosition, 1);
+    fragPosition = vec3(model * vec4(vertexPosition, 1));
+    fragLightPosition = lightViewProjection * model * vec4(vertexPosition, 1);
     cameraPosition = camPos;
 }
