@@ -463,7 +463,6 @@ void BatchArray::RemoveObject(RenderObject *renderObject) {
         totalObjects--;
         std::swap(renderObjects[index][dataIndex], renderObjects[index][renderObjects[index].size() - 1]);
         renderObjects[index][dataIndex]->objectDataIndex = dataIndex;
-
         renderObjects[index].pop_back();
 
         // Move object and instance mapping data.

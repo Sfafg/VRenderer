@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_LINKER_TYPE LLD)
 set(CMAKE_CXX_STANDARD 23)
 
-option(VRENDERER_BUILD_TESTS "Build tests" OFF)
+option(VRENDERER_BUILD_TESTS "Build tests" ON)
 
 set(TESTS_ROOT "${PROJECT_SOURCE_DIR}/tests")
 set(SRC_ROOT "${PROJECT_SOURCE_DIR}/src")
@@ -45,7 +45,7 @@ foreach(SHADER ${LIB_SHADERS})
     string(REPLACE "${SHADER_ROOT}/" "" SHADER_NAME "${SHADER}")
     add_custom_command(
         OUTPUT "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
-        COMMAND "${GLSLC_EXECUTABLE}" -g -O0 -Werror "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
+        COMMAND "${GLSLC_EXECUTABLE}" -Werror "${SHADER}" -o "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv"
         DEPENDS "${SHADER}" "${LIB_SHADER_DEPEND}"
         COMMENT "Compiling Shader: ${SHADER_NAME}.spv"
     )
@@ -147,9 +147,4 @@ if(VRENDERER_BUILD_TESTS)
     add_executable(VRenderer_Renderer ${TESTS_ROOT}/Source.cpp)
     target_link_libraries(VRenderer_Renderer PRIVATE VRenderer_VRenderer glfw glm assimp)
     add_dependencies(VRenderer_Renderer VRenderer_Shaders VRenderer_Resources)
-
-# RendererTest
-    add_executable(VRenderer_RendererTest ${TESTS_ROOT}/RendererTest.cpp)
-    target_link_libraries(VRenderer_RendererTest PRIVATE VRenderer_VRenderer glfw glm)
-    add_dependencies(VRenderer_RendererTest VRenderer_Shaders VRenderer_Resources)
 endif()

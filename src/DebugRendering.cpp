@@ -34,6 +34,11 @@ void Debug::Init() {
         ),
         {.cullMode = vg::CullMode::Back, .depthWriteEnable = false, .enableLogicOp = false}
     );
+
+    // for (auto &mesh : meshes)
+    //     BatchArray::SetLOD(
+    //         BatchArray::Add(&mesh, &material, sizeof(glm::mat4) + sizeof(glm::vec4)), {{&mesh, &opaqueMaterial}}
+    //     );
 }
 Material *GetMaterial(const glm::vec4 &color) { return color.a == 1.0f ? &opaqueMaterial : &material; }
 
@@ -45,12 +50,15 @@ void Debug::Destroy() {
     meshNames.clear();
 }
 
-// void Debug::DrawPlane(glm::vec3 point, glm::vec3 normal, glm::vec2 size, int frameDuration) {
-//     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius));
+void Debug::DrawPlane(glm::vec3 point, glm::vec3 normal, glm::vec2 size, int frameDuration) {
+    glm::mat4 mat = glm::translate(glm::mat4(1), point) * glm::toMat4(glm::rotation(glm::vec3(0, 0, 1), normal)) *
+                    glm::scale(glm::mat4(1), glm::vec3(size.x, size.y, 1));
 
-//     objects.emplace_back(RenderObject(GetMesh("Plane"), &material, std::make_tuple(color, matrix * mat), true));
-//     objectLifeTime.push_back(frameDuration);
-// }
+    objects.emplace_back(
+        RenderObject(GetMesh("Plane"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
+    );
+    objectLifeTime.push_back(frameDuration);
+}
 
 void Debug::DrawSphere(glm::vec3 center, float radius, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius));
@@ -59,13 +67,6 @@ void Debug::DrawSphere(glm::vec3 center, float radius, int frameDuration) {
         RenderObject(GetMesh("Sphere"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
     );
     objectLifeTime.push_back(frameDuration);
-
-    // TODO: this is bugging.
-    // static bool a = false;
-    // if (!a) {
-    //     BatchArray::SetLOD(BatchArray::Get(GetMesh("Sphere"), &material), {{GetMesh("Sphere"), &opaqueMaterial}});
-    //     a = true;
-    // }
 }
 
 // void Debug::DrawWireSphere(glm::vec3 center, float radius, int frameDuration);
@@ -134,7 +135,25 @@ void Debug::DrawArrow(glm::vec3 begin, glm::vec3 end, int frameDuration) {
 
     matrix = mat;
 }
-// void Debug::DrawTriangle(glm::vec3 a, glm::vec3 b, glm::vec3 c, int frameDuration);
+void Debug::DrawTriangle(glm::vec3 a, glm::vec3 b, glm::vec3 c, int frameDuration) {
+    glm::vec3 ab = glm::normalize(b - a);
+    glm::vec3 ac = glm::normalize(c - a);
+    glm::vec3 n = glm::cross(ab, ac);
+
+    glm::mat4 m1 = glm::transpose(glm::mat4{{0, 0, -1, 0}, {-0.5, 0.5, 0, 0}, {0, 0, 0, 1}, {1, 1, 1, 1}});
+    glm::mat4 m2 = {
+        glm::vec4(a, 1),
+        glm::vec4(b, 1),
+        glm::vec4(c, 1),
+        glm::vec4(n, 1),
+    };
+    glm::mat4 mat = m2 * glm::inverse(m1);
+
+    objects.emplace_back(
+        RenderObject(GetMesh("Triangle"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
+    );
+    objectLifeTime.push_back(frameDuration);
+}
 void Debug::DrawCylinder(glm::vec3 center, float radius, float height, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius, radius, height));
 
@@ -191,12 +210,16 @@ void Debug::Frame() {
     }
 }
 
-void Debug::Reserve(BatchArray *batchArray, std::string meshName, bool transparent, int count) {
-    batchArray->ReserveObjects(batchArray->Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial), count);
+void Debug::Reserve(std::string meshName, bool transparent, int count) {
+    int batchID = BatchArray::Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial);
+    if (batchID == -1U) return;
+    BatchArray::ReserveObjects(batchID, count);
 }
 
-int Debug::ObjectCount(BatchArray *batchArray, std::string meshName, bool transparent) {
-    return batchArray->GetObjectCount(batchArray->Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial));
+int Debug::ObjectCount(std::string meshName, bool transparent) {
+    int batchID = BatchArray::Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial);
+    if (batchID == -1U) return 0;
+    return BatchArray::GetObjectCount(batchID);
 }
 
 glm::mat4 Debug::matrix(1);

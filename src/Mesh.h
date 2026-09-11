@@ -46,12 +46,15 @@ class Mesh {
     static MeshArray *meshArray;
 
     Mesh(
-        glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, int vertexByteSize, void *vertexData, int indexCount,
-        int indexByteSize, void *indexData
+        glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, int vertexByteSize, const void *vertexData,
+        int indexCount, int indexByteSize, const void *indexData
     );
 
     template <typename T, typename TIndex>
-    Mesh(glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, T *vertices, int indexCount, TIndex *indices)
+    Mesh(
+        glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, const T *vertices, int indexCount,
+        const TIndex *indices
+    )
         : Mesh(boundsMin, boundsMax, vertexCount, sizeof(T), vertices, indexCount, sizeof(TIndex), indices) {}
 
     Mesh();

@@ -16,14 +16,17 @@ struct RAIIGLFW {
     ~RAIIGLFW();
 };
 
+struct Vertex {
+    glm::vec3 position;
+};
+
+// TODO: Fix memory issues when removing objects.
 // TODO: MultiDrawIndirect.
-// TODO: Multiple windows support.
 // TODO: Add Debug Rendering as part of library.
-// TODO: Optymize.
 
 GLFWwindow *CreateWindow();
 vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window);
-vg::Instance CreateInstance();
+vg::Instance *CreateInstance();
 vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue);
 glm::vec3 GetMoveDirection(GLFWwindow *window, float speed = 0.4f);
 glm::quat GetRotation(GLFWwindow *window, glm::quat cameraRotation, float speed = 0.001f);
@@ -34,8 +37,7 @@ int main() {
     int w, h;
     glfwGetFramebufferSize(window, &w, &h);
 
-    auto instance = CreateInstance();
-    vg::instance = &instance;
+    vg::instance = CreateInstance();
     auto windowSurface = CreateWindowSurface(window);
     auto generalQueue = vg::Queue({vg::QueueType::General}, 1.0f);
     auto renderDevice = CreateDevice(windowSurface, generalQueue);
@@ -58,52 +60,43 @@ int main() {
              {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
              {2, 1, vg::Format::R32UINT}}
         ),
-        {.cullMode = vg::CullMode::Back}, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(0.0f, 1.0f, 0.0f, 1.0f))
+        {.cullMode = vg::CullMode::Back}, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f))
     );
-
-    Material materialLOD1(&material, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(0.5f, 1.0f, 0.5f, 1.0f)));
-    Material materialLOD2(&material, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 0.7f, 0.7f, 1.0f)));
-    Material materialLOD3(&material, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 0.3f, 0.3f, 1.0f)));
-    Material materialLOD4(&material, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)));
 
     Debug::Init();
 
     std::vector<Material> materials;
     std::vector<Mesh> meshes;
     std::vector<RenderObject> renderObjects;
-    // Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
+    Load::Model("resources/TreeOnMountain.fbx", &material, &renderObjects, &materials, &meshes);
 
     Mesh monkey = std::move(Load::Meshes("resources/Monkey_LOD1.fbx")[0]);
-    Mesh monkeyLOD1 = std::move(Load::Meshes("resources/Monkey_LOD2.fbx")[0]);
+    Mesh monkeyLOD1 = std::move(Load::Meshes("resources/Monkey_LOD1.fbx")[0]);
     Mesh monkeyLOD2 = std::move(Load::Meshes("resources/Monkey_LOD2.fbx")[0]);
     Mesh monkeyLOD3 = std::move(Load::Meshes("resources/Monkey_LOD3.fbx")[0]);
     Mesh monkeyLOD4 = std::move(Load::Meshes("resources/Monkey_LOD4.fbx")[0]);
 
     BatchArray::SetLOD(
-        BatchArray::Add(&monkey, &material, sizeof(glm::mat4)), {{&monkeyLOD1, &materialLOD1},
-                                                                 {&monkeyLOD2, &materialLOD2},
-                                                                 {&monkeyLOD3, &materialLOD3},
-                                                                 {&monkeyLOD4, &materialLOD4}}
+        BatchArray::Add(&monkey, &material, sizeof(glm::mat4)),
+        {{&monkeyLOD1, &material}, {&monkeyLOD2, &material}, {&monkeyLOD3, &material}, {&monkeyLOD4, &material}}
     );
 
-    int monkeyCount = 10'000;
+    int monkeyCount = 3'0;
     BatchArray::ReserveObjects(BatchArray::Get(&monkey, &material), monkeyCount);
+    int edgeSize = pow(monkeyCount, 1.0 / 2.0);
     for (int i = 0; i < monkeyCount; i++) {
-        glm::vec3 pos(
-            (i % (int)sqrt(monkeyCount) - sqrt(monkeyCount) / 2) * 3,
-            (i / floor(sqrt(monkeyCount)) - sqrt(monkeyCount)) * 3, 0
-        );
+        glm::vec3 pos((i % edgeSize - edgeSize / 2) * 8, ((i / edgeSize) % edgeSize - edgeSize / 2) * 8, 10);
         glm::mat4 transform = glm::translate(glm::mat4(1), pos);
         renderObjects.emplace_back(RenderObject(&monkey, &material, transform));
     }
 
-    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 10);
-    Debug::Reserve(&batchManager, "Cube", false, 1e2);
-    for (int i = 0; i < 1e2; i++) {
-        Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-        Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 10);
-    }
+    // Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    // Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    // Debug::Reserve("Cube", false, 1e5);
+    // for (int i = 0; i < 1e5; i++) {
+    //     Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    //     Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    // }
 
     glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);
@@ -122,16 +115,19 @@ int main() {
 
         static float t = 0;
         t += 0.01;
-        // Debug::color = glm::vec4(0, 0, 1, 0.5);
-        // Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
-        // Debug::color = glm::vec4(0, 1, 0, 0.5);
-        // Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
-        // Debug::color = glm::vec4(1, 0, 0, 0.5);
-        // Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
-
-        // Debug::Reserve(&batchManager, "Cube", false, Debug::ObjectCount(&batchManager, "Cube", false));
+        Debug::color = glm::vec4(0, 0, 1, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
+        Debug::color = glm::vec4(0, 1, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
+        Debug::color = glm::vec4(1, 0, 0, 0.5);
+        Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
         cameraRotation = GetRotation(window, cameraRotation, 0.001f);
         cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
+
+        Debug::color = glm::vec4(1, 0.4, 0.4, 1);
+        // Debug::DrawPlane(glm::vec3(0, 0, 0), glm::normalize(glm::vec3(0, 0, 1)), glm::vec2(3, 5));
+
+        Debug::DrawTriangle({0, 0, 0}, {1, 0, 0}, {0, 2, 0});
 
         glm::mat4 view = glm::lookAt(
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
@@ -170,12 +166,12 @@ vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window) {
     glfwCreateWindowSurface(*(VkInstance *)vg::instance, (GLFWwindow *)window, nullptr, (VkSurfaceKHR *)&windowSurface);
     return windowSurface;
 }
-vg::Instance CreateInstance() {
+vg::Instance *CreateInstance() {
     uint32_t glfwExtensionCount = 0;
     const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     std::vector<const char *> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
     extensions.push_back("VK_KHR_get_physical_device_properties2");
-    return vg::Instance(extensions, [](vg::MessageSeverity severity, const char *message) {
+    static vg::Instance instance(extensions, [](vg::MessageSeverity severity, const char *message) {
         static bool first = true;
         std::ofstream logFile("logs.txt", first ? std::ofstream::trunc : std::ofstream::app);
         first = false;
@@ -190,6 +186,7 @@ vg::Instance CreateInstance() {
         if (severity < vg::MessageSeverity::Warning) return;
         std::cout << '\n' << message << '\n' << '\n' << '\n' << '\n' << '\n';
     });
+    return &instance;
 }
 vg::Device CreateDevice(vg::SurfaceHandle windowSurface, vg::Queue &generalQueue) {
     vg::DeviceFeatures deviceFeatures(

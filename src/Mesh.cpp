@@ -33,8 +33,8 @@ MeshArray &MeshArray::operator=(MeshArray &&o) {
 MeshArray::~MeshArray() {}
 
 Mesh::Mesh(
-    glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, int vertexByteSize, void *vertexData, int indexCount,
-    int indexByteSize, void *indexData
+    glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, int vertexByteSize, const void *vertexData,
+    int indexCount, int indexByteSize, const void *indexData
 ) {
     assert(meshArray && "Current meshArray needs to be assigned!");
 

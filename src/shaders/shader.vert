@@ -36,7 +36,6 @@ layout(location = 4) out float roughness;
 layout(location = 5) out vec3 cameraPosition;
 
 void main() {
-    // DrawCall drawCall = drawCalls[gl_DrawID + drawIdOffset];
     DrawCall drawCall = drawCalls[drawIdOffset];
     mat4 model = objectData[objectIndex];
     Material material = materials[drawCall.materialIndex];
@@ -48,5 +47,6 @@ void main() {
     roughness = material.roughness;
     fragPosition = vec3(model * vec4(vertexPosition, 1));
     fragLightPosition = lightViewProjection * model * vec4(vertexPosition, 1);
+    fragLightPosition /= fragLightPosition.w;
     cameraPosition = camPos;
 }
