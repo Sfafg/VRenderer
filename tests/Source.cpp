@@ -22,7 +22,6 @@ struct Vertex {
 
 // TODO: Fix memory issues when removing objects.
 // TODO: MultiDrawIndirect.
-// TODO: Add Debug Rendering as part of library.
 
 GLFWwindow *CreateWindow();
 vg::SurfaceHandle CreateWindowSurface(GLFWwindow *window);
@@ -90,13 +89,13 @@ int main() {
         renderObjects.emplace_back(RenderObject(&monkey, &material, transform));
     }
 
-    // Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    // Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
-    // Debug::Reserve("Cube", false, 1e5);
-    // for (int i = 0; i < 1e5; i++) {
-    //     Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    //     Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
-    // }
+    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    Debug::Reserve("WireCube", false, 1e3);
+    for (int i = 0; i < 1e3; i++) {
+        Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+        Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    }
 
     glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);
@@ -116,11 +115,11 @@ int main() {
         static float t = 0;
         t += 0.01;
         Debug::color = glm::vec4(0, 0, 1, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
+        Debug::DrawWireSphere(glm::vec3(3, 4, sin(t + 1)), 1);
         Debug::color = glm::vec4(0, 1, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
+        Debug::DrawWireSphere(glm::vec3(3, 2, sin(t + 2)), 1);
         Debug::color = glm::vec4(1, 0, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
+        Debug::DrawWireSphere(glm::vec3(3, 0, sin(t + 3)), 1);
         cameraRotation = GetRotation(window, cameraRotation, 0.001f);
         cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
 

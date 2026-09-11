@@ -7,6 +7,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 Material material;
+Material lineMaterial;
 Material opaqueMaterial;
 std::vector<std::string> meshNames;
 std::list<Mesh> meshes;
@@ -22,6 +23,16 @@ void Debug::Init() {
              {2, 1, vg::Format::R32UINT}}
         ),
         {.cullMode = vg::CullMode::Back}
+    );
+    lineMaterial = Material(
+        false, "resources/shaders/debugShader.vert.spv", "resources/shaders/debugShader.frag.spv",
+        vg::VertexLayout(
+            {{0, sizeof(float) * 6}, {1, sizeof(uint), vg::InputRate::Instance}},
+            {{0, 0, vg::Format::RGB32SFLOAT},
+             {1, 0, vg::Format::RGB32SFLOAT, sizeof(float) * 3},
+             {2, 1, vg::Format::R32UINT}}
+        ),
+        {.primitive = vg::Primitive::Lines, .cullMode = vg::CullMode::Back}
     );
 
     material = Material(
@@ -69,8 +80,15 @@ void Debug::DrawSphere(glm::vec3 center, float radius, int frameDuration) {
     objectLifeTime.push_back(frameDuration);
 }
 
-// void Debug::DrawWireSphere(glm::vec3 center, float radius, int frameDuration);
-//
+void Debug::DrawWireSphere(glm::vec3 center, float radius, int frameDuration) {
+    glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius));
+
+    objects.emplace_back(
+        RenderObject(GetMesh("WireSphere"), &lineMaterial, std::make_tuple(color, matrix * mat), true)
+    );
+    objectLifeTime.push_back(frameDuration);
+}
+
 void Debug::DrawCube(glm::vec3 center, glm::vec3 extends, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), extends);
 
@@ -79,7 +97,12 @@ void Debug::DrawCube(glm::vec3 center, glm::vec3 extends, int frameDuration) {
     );
     objectLifeTime.push_back(frameDuration);
 }
-// void Debug::DrawWireCube(glm::vec3 center, glm::vec3 extends, int frameDuration);
+void Debug::DrawWireCube(glm::vec3 center, glm::vec3 extends, int frameDuration) {
+    glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), extends);
+
+    objects.emplace_back(RenderObject(GetMesh("WireCube"), &lineMaterial, std::make_tuple(color, matrix * mat), true));
+    objectLifeTime.push_back(frameDuration);
+}
 void Debug::DrawLine(glm::vec3 begin, glm::vec3 end, int frameDuration) {
     const float thickness = 0.03;
     glm::mat4 mat = matrix;
