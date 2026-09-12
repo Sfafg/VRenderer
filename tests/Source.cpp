@@ -111,6 +111,7 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
+        glfwGetFramebufferSize(window, &w, &h);
 
         static float t = 0;
         t += 0.01;
@@ -128,13 +129,15 @@ int main() {
 
         Debug::DrawTriangle({0, 0, 0}, {1, 0, 0}, {0, 2, 0});
 
+        glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, nearPlane, farPlane);
+        proj[1][1] *= -1;
         glm::mat4 view = glm::lookAt(
             cameraPos, cameraPos + cameraRotation * glm::vec3(0, 1, 0), cameraRotation * glm::vec3(0, 0, 1)
         );
 
         Debug::Frame();
         renderer.RenderFrame(
-            generalQueue, proj * view, cameraPos, nearPlane, farPlane,
+            w, h, generalQueue, proj * view, cameraPos, nearPlane, farPlane,
             {.lightViewProjection = lightProj * lightView,
              .lightDirection = glm::vec3(-1),
              .lightColor = glm::vec3(1, 1, 1)},

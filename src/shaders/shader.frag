@@ -86,7 +86,7 @@ float EstimatePenumbraWidth() {
     float receiverDepth = fragLightPosition.z;
     float blockerDepth = 0;
     float blockerPointCount = 0;
-    float searchRadius = LIGHT_WIDTH / receiverDepth / 8192.0;
+    float searchRadius = LIGHT_WIDTH / receiverDepth / 4096.0;
 
     float angle = noise1D(hash1D(int(fragPosition.x * 7919.3)) + hash1D(int(fragPosition.y * 7919.3))) * 3.14;
     mat2 rotationMatrix = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
@@ -114,7 +114,7 @@ float PCF() {
     mat2 rotationMatrix = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
     for (int i = 0; i < SAMPLE_COUNT; i++) {
         vec2 coords = rotationMatrix * poissonDisk[i];
-        float candidateDepth = SampleShadowDepth(fragLightPosition.xy, coords / 8192.0 * penumbraWidth);
+        float candidateDepth = SampleShadowDepth(fragLightPosition.xy, coords / 4096.0 * penumbraWidth);
         if (candidateDepth < receiverDepth) blockedPointCount++;
     }
 

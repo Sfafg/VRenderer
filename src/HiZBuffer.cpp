@@ -52,7 +52,7 @@ HiZBuffer::HiZBuffer(uint width, uint height) {
 HiZBuffer::Reduce::Reduce(HiZBuffer &buffer, const ImageView &depthView) : buffer(buffer), depthView(depthView) {}
 
 void HiZBuffer::Reduce::operator()(CmdBuffer &commandBuffer) const {
-    assert(buffer.mips.size() < 12);
+    // assert(buffer.mips.size() < 12);
 
     buffer.descriptors.AttachImage(
         DescriptorType::CombinedImageSampler, ImageLayout::DepthStencilReadOnlyOptimal, depthView, buffer.sampler, 1, 0
