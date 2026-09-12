@@ -115,11 +115,11 @@ int main() {
         static float t = 0;
         t += 0.01;
         Debug::color = glm::vec4(0, 0, 1, 0.5);
-        Debug::DrawWireSphere(glm::vec3(3, 4, sin(t + 1)), 1);
+        Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
         Debug::color = glm::vec4(0, 1, 0, 0.5);
-        Debug::DrawWireSphere(glm::vec3(3, 2, sin(t + 2)), 1);
+        Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
         Debug::color = glm::vec4(1, 0, 0, 0.5);
-        Debug::DrawWireSphere(glm::vec3(3, 0, sin(t + 3)), 1);
+        Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
         cameraRotation = GetRotation(window, cameraRotation, 0.001f);
         cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
 

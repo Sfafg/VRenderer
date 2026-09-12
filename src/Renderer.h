@@ -11,6 +11,11 @@
 #include "VG/VG.h"
 #include <vector>
 
+/**
+ * @brief Rendering coordinator
+ *
+ * Coordinates rendering operatrions, manages rendering objects per a Window.
+ */
 class Renderer {
     friend BatchArray;
     friend RenderBuffer;
