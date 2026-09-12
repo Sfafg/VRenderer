@@ -32,24 +32,21 @@ MeshArray &MeshArray::operator=(MeshArray &&o) {
 
 MeshArray::~MeshArray() {}
 
-Mesh::Mesh(
-    glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, int vertexByteSize, const void *vertexData,
-    int indexCount, int indexByteSize, const void *indexData
-) {
+Mesh::Mesh(glm::vec3 boundsMin, glm::vec3 boundsMax, TableByteView vertexData, TableByteView indexData) {
     assert(meshArray && "Current meshArray needs to be assigned!");
 
     MeshMetaData meshData(
-        boundsMin, 0, boundsMax, 0, indexCount, meshArray->indexBuffer.GetSize() / indexByteSize,
-        std::ceil(meshArray->vertexBuffer.GetSize() / (float)vertexByteSize), 0
+        boundsMin, 0, boundsMax, 0, indexData.Count(), meshArray->indexBuffer.GetSize() / indexData.Size(),
+        std::ceil(meshArray->vertexBuffer.GetSize() / (float)vertexData.Size()), 0
     );
 
     index = meshArray->meshDataBuffer.Allocate(sizeof(meshData), sizeof(meshData));
     meshArray->meshDataBuffer.Write(index, meshData);
 
-    meshArray->vertexBuffer.Allocate(vertexCount * vertexByteSize, vertexByteSize);
-    meshArray->vertexBuffer.Write(index, vertexData, vertexCount * vertexByteSize);
-    meshArray->indexBuffer.Allocate(indexCount * indexByteSize, indexByteSize);
-    meshArray->indexBuffer.Write(index, indexData, indexCount * indexByteSize);
+    meshArray->vertexBuffer.Allocate(vertexData.TotalSize(), vertexData.Size());
+    meshArray->vertexBuffer.Write(index, vertexData.Ptr(), vertexData.TotalSize());
+    meshArray->indexBuffer.Allocate(indexData.TotalSize(), indexData.Size());
+    meshArray->indexBuffer.Write(index, indexData.Ptr(), indexData.TotalSize());
     meshArray->meshes.push_back(this);
 }
 

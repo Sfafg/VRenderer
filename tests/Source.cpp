@@ -1,8 +1,11 @@
 #include <fstream>
 #include <iostream>
+#include <thread>
+#include <chrono>
 #include "VRenderer/VRenderer.h"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+using namespace std::chrono_literals;
 extern "C" {
 typedef struct VkInstance_T *VkInstance;
 typedef struct VkSurfaceKHR_T *VkSurfaceKHR;
@@ -89,13 +92,12 @@ int main() {
         renderObjects.emplace_back(RenderObject(&monkey, &material, transform));
     }
 
-    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
-    Debug::Reserve("WireCube", false, 1e3);
-    for (int i = 0; i < 1e3; i++) {
-        Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-        Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
-    }
+    // Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    // Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    // for (int i = 0; i < 1e6; i++) {
+    //     Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    //     Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    // }
 
     glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);
@@ -112,6 +114,7 @@ int main() {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, true);
         glfwGetFramebufferSize(window, &w, &h);
+        std::this_thread::sleep_for(10ms);
 
         static float t = 0;
         t += 0.01;
@@ -123,11 +126,8 @@ int main() {
         Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
         cameraRotation = GetRotation(window, cameraRotation, 0.001f);
         cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
-
-        Debug::color = glm::vec4(1, 0.4, 0.4, 1);
-        // Debug::DrawPlane(glm::vec3(0, 0, 0), glm::normalize(glm::vec3(0, 0, 1)), glm::vec2(3, 5));
-
-        Debug::DrawTriangle({0, 0, 0}, {1, 0, 0}, {0, 2, 0});
+        Debug::color = glm::vec4(1, 0.4, 0.4, 0.1);
+        Debug::DrawSphere(cameraPos, 0.1, 1000);
 
         glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, nearPlane, farPlane);
         proj[1][1] *= -1;

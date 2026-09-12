@@ -13,6 +13,35 @@ std::vector<std::string> meshNames;
 std::list<Mesh> meshes;
 Mesh *GetMesh(const std::string &name);
 
+void GrowObjectReserves(Material *material, Mesh *mesh) {
+    int batchID = BatchArray::Get(mesh, material);
+    if (batchID == -1U) return;
+    if (BatchArray::GetObjectCount(batchID) + 1 < BatchArray::GetObjectCapacity(batchID)) return;
+    BatchArray::ReserveObjects(batchID, std::max(1.0, BatchArray::GetObjectCount(batchID) * 1.6));
+    std::cout << "Grown objects to: " << BatchArray::GetObjectCapacity(batchID) << "\n";
+}
+
+void TryToShrink() {
+    for (auto &mesh : meshes) {
+        uint batchID = -1U;
+        if ((batchID = BatchArray::Get(&mesh, &material)) != -1U &&
+            BatchArray::GetObjectCount(batchID) < BatchArray::GetObjectCapacity(batchID) / 2) {
+            BatchArray::ReserveObjects(batchID, std::max(1U, BatchArray::GetObjectCapacity(batchID) / 2));
+            std::cout << "Shrank objects to: " << BatchArray::GetObjectCapacity(batchID) << "\n";
+        }
+        if ((batchID = BatchArray::Get(&mesh, &opaqueMaterial)) != -1U &&
+            BatchArray::GetObjectCount(batchID) < BatchArray::GetObjectCapacity(batchID) / 2) {
+            BatchArray::ReserveObjects(batchID, std::max(1U, BatchArray::GetObjectCapacity(batchID) / 2));
+            std::cout << "Shrank objects to: " << BatchArray::GetObjectCapacity(batchID) << "\n";
+        }
+        if ((batchID = BatchArray::Get(&mesh, &lineMaterial)) != -1U &&
+            BatchArray::GetObjectCount(batchID) < BatchArray::GetObjectCapacity(batchID) / 2) {
+            BatchArray::ReserveObjects(batchID, std::max(1U, BatchArray::GetObjectCapacity(batchID) / 2));
+            std::cout << "Shrank objects to: " << BatchArray::GetObjectCapacity(batchID) << "\n";
+        }
+    }
+}
+
 void Debug::Init() {
     opaqueMaterial = Material(
         false, "resources/shaders/debugShader.vert.spv", "resources/shaders/debugShader.frag.spv",
@@ -64,7 +93,7 @@ void Debug::Destroy() {
 void Debug::DrawPlane(glm::vec3 point, glm::vec3 normal, glm::vec2 size, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), point) * glm::toMat4(glm::rotation(glm::vec3(0, 0, 1), normal)) *
                     glm::scale(glm::mat4(1), glm::vec3(size.x, size.y, 1));
-
+    GrowObjectReserves(GetMaterial(color), GetMesh("Plane"));
     objects.emplace_back(
         RenderObject(GetMesh("Plane"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
     );
@@ -74,6 +103,7 @@ void Debug::DrawPlane(glm::vec3 point, glm::vec3 normal, glm::vec2 size, int fra
 void Debug::DrawSphere(glm::vec3 center, float radius, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius));
 
+    GrowObjectReserves(GetMaterial(color), GetMesh("Sphere"));
     objects.emplace_back(
         RenderObject(GetMesh("Sphere"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
     );
@@ -83,6 +113,7 @@ void Debug::DrawSphere(glm::vec3 center, float radius, int frameDuration) {
 void Debug::DrawWireSphere(glm::vec3 center, float radius, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius));
 
+    GrowObjectReserves(&lineMaterial, GetMesh("WireSphere"));
     objects.emplace_back(
         RenderObject(GetMesh("WireSphere"), &lineMaterial, std::make_tuple(color, matrix * mat), true)
     );
@@ -92,6 +123,7 @@ void Debug::DrawWireSphere(glm::vec3 center, float radius, int frameDuration) {
 void Debug::DrawCube(glm::vec3 center, glm::vec3 extends, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), extends);
 
+    GrowObjectReserves(GetMaterial(color), GetMesh("Cube"));
     objects.emplace_back(
         RenderObject(GetMesh("Cube"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
     );
@@ -100,6 +132,7 @@ void Debug::DrawCube(glm::vec3 center, glm::vec3 extends, int frameDuration) {
 void Debug::DrawWireCube(glm::vec3 center, glm::vec3 extends, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), extends);
 
+    GrowObjectReserves(&lineMaterial, GetMesh("WireCube"));
     objects.emplace_back(RenderObject(GetMesh("WireCube"), &lineMaterial, std::make_tuple(color, matrix * mat), true));
     objectLifeTime.push_back(frameDuration);
 }
@@ -116,6 +149,7 @@ void Debug::DrawLine(glm::vec3 begin, glm::vec3 end, int frameDuration) {
              glm::toMat4(glm::rotation(glm::vec3(0, 0, 1), to)) *
              glm::scale(glm::mat4(1), glm::vec3(thickness, thickness, distance * 0.5f));
 
+    GrowObjectReserves(GetMaterial(color), GetMesh("Cylinder"));
     objects.emplace_back(
         RenderObject(GetMesh("Cylinder"), GetMaterial(Debug::color), std::make_tuple(color, matrix), true)
     );
@@ -139,6 +173,7 @@ void Debug::DrawArrow(glm::vec3 begin, glm::vec3 end, int frameDuration) {
              glm::toMat4(glm::rotation(glm::vec3(0, 0, 1), to)) *
              glm::scale(glm::mat4(1), glm::vec3(arrowThickness, arrowThickness, arrowLength * 0.5));
 
+    GrowObjectReserves(GetMaterial(color), GetMesh("Cone"));
     objects.emplace_back(
         RenderObject(GetMesh("Cone"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
     );
@@ -172,6 +207,7 @@ void Debug::DrawTriangle(glm::vec3 a, glm::vec3 b, glm::vec3 c, int frameDuratio
     };
     glm::mat4 mat = m2 * glm::inverse(m1);
 
+    GrowObjectReserves(GetMaterial(color), GetMesh("Triangle"));
     objects.emplace_back(
         RenderObject(GetMesh("Triangle"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
     );
@@ -180,6 +216,7 @@ void Debug::DrawTriangle(glm::vec3 a, glm::vec3 b, glm::vec3 c, int frameDuratio
 void Debug::DrawCylinder(glm::vec3 center, float radius, float height, int frameDuration) {
     glm::mat4 mat = glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(radius, radius, height));
 
+    GrowObjectReserves(GetMaterial(color), GetMesh("Cylinder"));
     objects.emplace_back(
         RenderObject(GetMesh("Cylinder"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
     );
@@ -189,6 +226,7 @@ void Debug::DrawCone(glm::vec3 center, float baseRadius, float height, int frame
     glm::mat4 mat =
         glm::translate(glm::mat4(1), center) * glm::scale(glm::mat4(1), glm::vec3(baseRadius, baseRadius, height));
 
+    GrowObjectReserves(GetMaterial(color), GetMesh("Cone"));
     objects.emplace_back(
         RenderObject(GetMesh("Cone"), GetMaterial(Debug::color), std::make_tuple(color, matrix * mat), true)
     );
@@ -218,6 +256,7 @@ void Debug::DrawFrustum(const glm::mat4 &view, const glm::mat4 &projection, int 
     DrawLine(corners[1], corners[5], frameDuration);
     DrawLine(corners[2], corners[6], frameDuration);
     DrawLine(corners[3], corners[7], frameDuration);
+    GrowObjectReserves(GetMaterial(color), GetMesh("Cube"));
     objects.emplace_back(
         RenderObject(GetMesh("Cube"), GetMaterial(Debug::color), std::make_tuple(color, inverseViewProjection), true)
     );
@@ -225,6 +264,7 @@ void Debug::DrawFrustum(const glm::mat4 &view, const glm::mat4 &projection, int 
 }
 
 void Debug::Frame() {
+    TryToShrink();
     for (int i = objects.size() - 1; i >= 0; i--) {
         if (objectLifeTime[i] <= 0) {
             objects.erase(objects.begin() + i);
@@ -233,16 +273,13 @@ void Debug::Frame() {
     }
 }
 
-void Debug::Reserve(std::string meshName, bool transparent, int count) {
-    int batchID = BatchArray::Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial);
-    if (batchID == -1U) return;
-    BatchArray::ReserveObjects(batchID, count);
-}
-
-int Debug::ObjectCount(std::string meshName, bool transparent) {
-    int batchID = BatchArray::Get(GetMesh(meshName), transparent ? &material : &opaqueMaterial);
-    if (batchID == -1U) return 0;
-    return BatchArray::GetObjectCount(batchID);
+void Debug::ShrinkToFit() {
+    for (auto &mesh : meshes) {
+        uint batchID = -1U;
+        if ((batchID = BatchArray::Get(&mesh, &material)) != -1U) BatchArray::ShrinkToFit(batchID);
+        if ((batchID = BatchArray::Get(&mesh, &opaqueMaterial)) != -1U) BatchArray::ShrinkToFit(batchID);
+        if ((batchID = BatchArray::Get(&mesh, &lineMaterial)) != -1U) BatchArray::ShrinkToFit(batchID);
+    }
 }
 
 glm::mat4 Debug::matrix(1);

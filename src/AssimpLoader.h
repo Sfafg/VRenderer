@@ -36,7 +36,7 @@ inline std::vector<Mesh> Meshes(const std::string &path) {
         }
         glm::vec3 min(mesh.mAABB.mMin.x, mesh.mAABB.mMin.y, mesh.mAABB.mMin.z);
         glm::vec3 max(mesh.mAABB.mMax.x, mesh.mAABB.mMax.y, mesh.mAABB.mMax.z);
-        meshes.emplace_back(Mesh(min, max, vertices.size(), vertices.data(), indices.size(), indices.data()));
+        meshes.emplace_back(Mesh(min, max, vertices, indices));
     }
     return meshes;
 }
@@ -79,7 +79,7 @@ inline void Model(
         }
         glm::vec3 min(mesh.mAABB.mMin.x, mesh.mAABB.mMin.y, mesh.mAABB.mMin.z);
         glm::vec3 max(mesh.mAABB.mMax.x, mesh.mAABB.mMax.y, mesh.mAABB.mMax.z);
-        meshes->emplace_back(Mesh(min, max, vertices.size(), vertices.data(), indices.size(), indices.data()));
+        meshes->emplace_back(Mesh(min, max, vertices, indices));
     }
 
     auto processNode = [&renderObjects, &meshes, &materials,

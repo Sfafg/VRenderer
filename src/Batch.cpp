@@ -479,7 +479,7 @@ void BatchArray::RemoveObject(RenderObject *renderObject) {
         }
     }
 
-    if (renderObjects[index].size() == 0) Remove(index);
+    // if (renderObjects[index].size() == 0) Remove(index);
 }
 
 void BatchArray::NotifyMaterialDestroy(uint index) {
