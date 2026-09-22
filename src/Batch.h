@@ -2,6 +2,8 @@
 #include "RenderBuffer.h"
 #include <unordered_map>
 
+#include "Table.h"
+
 class Material;
 class Mesh;
 class RenderObject;
@@ -99,6 +101,7 @@ class BatchArray {
     std::vector<int> drawCallInstanceCount;
     std::vector<std::tuple<uint, uint>> drawCallMaterialIndices;
 
+    // Fix: Is this even used really????
     RenderBuffer drawCallBuffer;
 
     std::vector<Batch> batches;
@@ -106,4 +109,14 @@ class BatchArray {
     std::vector<std::vector<RenderObject *>> renderObjects;
     RenderBuffer batchBuffer;
     RenderBuffer objectBuffer;
+
+    // enum BatchTableColumn : size_t {
+    //     ObjectDataOffset,
+    //     FirstObjectIndex,
+    //     ObjectDataElementSize,
+    //     DrawCall,
+    //     Lods,
+    // };
+
+    gpuDB::Table<gpuDB::Chunk<uint, uint, uint, uint, uint[4]>, gpuDB::Chunk<RenderObject *, uint>> batchTable;
 };

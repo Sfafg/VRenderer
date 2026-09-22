@@ -18,7 +18,6 @@ void GrowObjectReserves(Material *material, Mesh *mesh) {
     if (batchID == -1U) return;
     if (BatchArray::GetObjectCount(batchID) + 1 < BatchArray::GetObjectCapacity(batchID)) return;
     BatchArray::ReserveObjects(batchID, std::max(1.0, BatchArray::GetObjectCount(batchID) * 1.6));
-    std::cout << "Grown objects to: " << BatchArray::GetObjectCapacity(batchID) << "\n";
 }
 
 void TryToShrink() {
@@ -27,17 +26,14 @@ void TryToShrink() {
         if ((batchID = BatchArray::Get(&mesh, &material)) != -1U &&
             BatchArray::GetObjectCount(batchID) < BatchArray::GetObjectCapacity(batchID) / 2) {
             BatchArray::ReserveObjects(batchID, std::max(1U, BatchArray::GetObjectCapacity(batchID) / 2));
-            std::cout << "Shrank objects to: " << BatchArray::GetObjectCapacity(batchID) << "\n";
         }
         if ((batchID = BatchArray::Get(&mesh, &opaqueMaterial)) != -1U &&
             BatchArray::GetObjectCount(batchID) < BatchArray::GetObjectCapacity(batchID) / 2) {
             BatchArray::ReserveObjects(batchID, std::max(1U, BatchArray::GetObjectCapacity(batchID) / 2));
-            std::cout << "Shrank objects to: " << BatchArray::GetObjectCapacity(batchID) << "\n";
         }
         if ((batchID = BatchArray::Get(&mesh, &lineMaterial)) != -1U &&
             BatchArray::GetObjectCount(batchID) < BatchArray::GetObjectCapacity(batchID) / 2) {
             BatchArray::ReserveObjects(batchID, std::max(1U, BatchArray::GetObjectCapacity(batchID) / 2));
-            std::cout << "Shrank objects to: " << BatchArray::GetObjectCapacity(batchID) << "\n";
         }
     }
 }

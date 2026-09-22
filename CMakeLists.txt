@@ -78,13 +78,19 @@ FetchContent_Declare(
   GIT_TAG master
 )
 FetchContent_MakeAvailable(glm)
+FetchContent_Declare(
+  gpuDB
+  GIT_REPOSITORY "https://github.com/Sfafg/gpuDB.git"
+  GIT_TAG main
+)
+FetchContent_MakeAvailable(gpuDB)
 
 file(GLOB_RECURSE SRC "${SRC_ROOT}/*.cpp")
 file(GLOB_RECURSE HEADER "${SRC_ROOT}/*.h")
 
 add_library(VRenderer_VRenderer STATIC)
 add_dependencies(VRenderer_VRenderer VRenderer_LibShaders)
-target_link_libraries(VRenderer_VRenderer PUBLIC VGraphics glm assimp)
+target_link_libraries(VRenderer_VRenderer PUBLIC VGraphics glm assimp gpuDB)
 target_sources(VRenderer_VRenderer
     PRIVATE
         ${SRC}
