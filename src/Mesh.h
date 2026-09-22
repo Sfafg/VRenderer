@@ -1,5 +1,6 @@
 #pragma once
 #include "RenderBuffer.h"
+#include "ByteView.h"
 #include <vector>
 #include <glm/glm.hpp>
 
@@ -45,14 +46,7 @@ class Mesh {
   public:
     static MeshArray *meshArray;
 
-    Mesh(
-        glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, int vertexByteSize, void *vertexData, int indexCount,
-        int indexByteSize, void *indexData
-    );
-
-    template <typename T, typename TIndex>
-    Mesh(glm::vec3 boundsMin, glm::vec3 boundsMax, int vertexCount, T *vertices, int indexCount, TIndex *indices)
-        : Mesh(boundsMin, boundsMax, vertexCount, sizeof(T), vertices, indexCount, sizeof(TIndex), indices) {}
+    Mesh(glm::vec3 boundsMin, glm::vec3 boundsMax, TableByteView vertexData, TableByteView indexData);
 
     Mesh();
     Mesh(Mesh &&);

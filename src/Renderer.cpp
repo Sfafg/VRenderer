@@ -25,18 +25,6 @@ Renderer::Renderer(
     Allocate(depthImage, {MemoryProperty::DeviceLocal});
     depthImageView = ImageView(depthImage, {ImageAspect::Depth});
 
-    hiZBuffers.resize(maxFramesInFlight);
-    for (auto &hiZBuffer : hiZBuffers) hiZBuffer = HiZBuffer(width, height);
-
-    gpuRenderers.resize(maxFramesInFlight);
-    for (auto &gpuRenderer : gpuRenderers) gpuRenderer = GPURenderer(maxFramesInFlight);
-
-    shadowhiZBuffers.resize(maxFramesInFlight);
-    for (auto &hiZBuffer : shadowhiZBuffers) hiZBuffer = HiZBuffer(width, height);
-
-    shadowgpuRenderers.resize(maxFramesInFlight);
-    for (auto &gpuRenderer : shadowgpuRenderers) gpuRenderer = GPURenderer(maxFramesInFlight);
-
     shadowImage = Image(
         {4096, 4096}, {Format::D32SFLOAT, Format::D32SFLOATS8UINT, Format::x8D24UNORMPACK},
         {FormatFeature::DepthStencilAttachment}, {ImageUsage::DepthStencilAttachment, ImageUsage::Sampled}, 1, 1
@@ -47,6 +35,19 @@ Renderer::Renderer(
         Filter::Linear, Filter::Linear, SamplerMipmapMode::Nearest, SamplerAddressMode::ClampToEdge,
         SamplerAddressMode::ClampToEdge, SamplerAddressMode::ClampToEdge
     );
+
+    hiZBuffers.resize(maxFramesInFlight);
+    for (auto &hiZBuffer : hiZBuffers) hiZBuffer = HiZBuffer(width, height);
+
+    gpuRenderers.resize(maxFramesInFlight);
+    for (auto &gpuRenderer : gpuRenderers) gpuRenderer = GPURenderer(maxFramesInFlight);
+
+    shadowhiZBuffers.resize(maxFramesInFlight);
+    for (auto &hiZBuffer : shadowhiZBuffers)
+        hiZBuffer = HiZBuffer(shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1]);
+
+    shadowgpuRenderers.resize(maxFramesInFlight);
+    for (auto &gpuRenderer : shadowgpuRenderers) gpuRenderer = GPURenderer(maxFramesInFlight);
 
     descriptorPool = DescriptorPool(
         maxFramesInFlight * 2, {{DescriptorType::UniformBuffer, maxFramesInFlight * 2},
@@ -86,8 +87,8 @@ void Renderer::SetLightData(const LightData &data) {
 }
 
 void Renderer::RenderFrame(
-    vg::Queue &queue, const glm::mat4 &cameraViewProjection, const glm::vec3 &cameraPosition, float nearPlane,
-    float farPlane, const Renderer::LightData &data, bool updateDrawInstructions
+    int width, int height, vg::Queue &queue, const glm::mat4 &cameraViewProjection, const glm::vec3 &cameraPosition,
+    float nearPlane, float farPlane, const Renderer::LightData &data, bool updateDrawInstructions
 ) {
     auto &bManager = *dataArrays.batchArray;
     auto &materialManager = *dataArrays.materialArray;
@@ -104,6 +105,32 @@ void Renderer::RenderFrame(
     if (bManager.batches.size() == 0) return;
 
     inFlightFence[frameIndex].Await(true);
+
+    // Swapchain resize.
+    Swapchain oldSwapchain;
+    int currentWidth = depthImage.GetDimensions()[0], currentHeight = depthImage.GetDimensions()[1];
+    if (width != currentWidth || height != currentHeight) {
+        currentDevice->WaitUntilIdle();
+
+        std::swap(oldSwapchain, swapchain);
+        swapchain = Swapchain(surface, maxFramesInFlight, currentWidth, currentHeight, oldSwapchain);
+        depthImage = Image(
+            {swapchain.GetWidth(), swapchain.GetHeight()},
+            {Format::D32SFLOAT, Format::D32SFLOATS8UINT, Format::x8D24UNORMPACK},
+            {FormatFeature::DepthStencilAttachment}, {ImageUsage::DepthStencilAttachment, ImageUsage::Sampled}
+        );
+        Allocate(depthImage, {MemoryProperty::DeviceLocal});
+        depthImageView = ImageView(depthImage, {ImageAspect::Depth});
+
+        hiZBuffers.resize(maxFramesInFlight);
+        for (auto &hiZBuffer : hiZBuffers) hiZBuffer = HiZBuffer(width, height);
+        for (int i = 0; i < swapchain.GetImageCount(); i++)
+            framebuffers[i] = Framebuffer(
+                renderPass, {swapchain.GetImageViews()[i], depthImageView}, swapchain.GetWidth(), swapchain.GetHeight()
+            );
+        depthPrepassFramebuffer =
+            vg::Framebuffer(depthOnlyPass, {depthImageView}, swapchain.GetWidth(), swapchain.GetHeight());
+    }
 
     auto [imageIndex, result] = swapchain.GetNextImageIndex(imageAvailableSemaphore[frameIndex]);
     SetLightData(data);
@@ -172,15 +199,16 @@ void Renderer::RenderFrame(
     // Depth prepass.
     commandBuffer[frameIndex].Append(
         BeginRenderpass(
-            depthOnlyPass, shadowFramebuffer, {0, 0}, {4096, 4096}, {ClearDepthStencil{1.0f, 0U}},
-            SubpassContents::Inline
+            depthOnlyPass, shadowFramebuffer, {0, 0}, {shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1]},
+            {ClearDepthStencil{1.0f, 0U}}, SubpassContents::Inline
         ),
         PushConstants(
             depthOnlyPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
             std::make_tuple(0, cameraPosition, data.lightViewProjection)
         ),
-        BindMeshBuffers(shadowgpuRenderers[frameIndex].instanceMapping), SetViewport(Viewport(4096, 4096)),
-        SetScissor(Scissor(4096, 4096)),
+        BindMeshBuffers(shadowgpuRenderers[frameIndex].instanceMapping),
+        SetViewport(Viewport(shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1])),
+        SetScissor(Scissor(shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1])),
         BindDescriptorSets(
             depthOnlyPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0,
             {shadowPassDescriptorSets[frameIndex]}
@@ -199,7 +227,8 @@ void Renderer::RenderFrame(
     if (updateDrawInstructions)
         commandBuffer[frameIndex].Append(
             GPURenderer::WriteInstructions(
-                shadowgpuRenderers[frameIndex], farPlane, nearPlane, cameraPosition, data.lightViewProjection
+                shadowgpuRenderers[frameIndex], shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1],
+                farPlane, nearPlane, cameraPosition, data.lightViewProjection
             )
         );
     commandBuffer[frameIndex].Append(
@@ -208,15 +237,16 @@ void Renderer::RenderFrame(
             {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
         ),
         BeginRenderpass(
-            depthOnlyPass, shadowFramebuffer, {0, 0}, {4096, 4096}, {ClearDepthStencil{1.0f, 0U}},
-            SubpassContents::Inline
+            depthOnlyPass, shadowFramebuffer, {0, 0}, {shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1]},
+            {ClearDepthStencil{1.0f, 0U}}, SubpassContents::Inline
         ),
         PushConstants(
             depthOnlyPass.GetPipelineLayouts()[0], ShaderStage::Vertex, 0,
             std::make_tuple(0, cameraPosition, data.lightViewProjection)
         ),
-        BindMeshBuffers(shadowgpuRenderers[frameIndex].instanceMapping), SetViewport(Viewport(4096, 4096)),
-        SetScissor(Scissor(4096, 4096)),
+        BindMeshBuffers(shadowgpuRenderers[frameIndex].instanceMapping),
+        SetViewport(Viewport(shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1])),
+        SetScissor(Scissor(shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1])),
         BindDescriptorSets(
             depthOnlyPass.GetPipelineLayouts()[0], PipelineBindPoint::Graphics, 0,
             {shadowPassDescriptorSets[frameIndex]}
@@ -263,7 +293,8 @@ void Renderer::RenderFrame(
     if (updateDrawInstructions)
         commandBuffer[frameIndex].Append(
             GPURenderer::WriteInstructions(
-                gpuRenderers[frameIndex], farPlane, nearPlane, cameraPosition, cameraViewProjection
+                gpuRenderers[frameIndex], swapchain.GetWidth(), swapchain.GetHeight(), farPlane, nearPlane,
+                cameraPosition, cameraViewProjection
             )
         );
 
@@ -310,8 +341,8 @@ void Renderer::_RecreateRenderpass() {
     std::vector<vg::SubpassDependency> dependencies(materialManager.subpasses.size());
     for (int i = 0; i < materialManager.subpasses.size(); i++) {
         dependencies[i] = vg::SubpassDependency(
-            i - 1, i, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::ColorAttachmentOutput, 0,
-            vg::Access::ColorAttachmentWrite, {}
+            i - 1, i, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::FragmentShader,
+            vg::Access::ColorAttachmentWrite, vg::Access::InputAttachmentRead, {vg::Dependency::ByRegion}
         );
     }
     renderPass = RenderPass(
@@ -399,7 +430,9 @@ void Renderer::_RecreateRenderpass() {
 
     depthPrepassFramebuffer =
         vg::Framebuffer(depthOnlyPass, {depthImageView}, swapchain.GetWidth(), swapchain.GetHeight());
-    shadowFramebuffer = vg::Framebuffer(depthOnlyPass, {shadowImageView}, 4096, 4096);
+    shadowFramebuffer = vg::Framebuffer(
+        depthOnlyPass, {shadowImageView}, shadowImage.GetDimensions()[0], shadowImage.GetDimensions()[1]
+    );
 }
 
 void Renderer::DrawFromBuffer::operator()(vg::CmdBuffer &cmdBuffer) const {

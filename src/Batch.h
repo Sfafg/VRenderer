@@ -2,6 +2,8 @@
 #include "RenderBuffer.h"
 #include <unordered_map>
 
+#include "Table.h"
+
 class Material;
 class Mesh;
 class RenderObject;
@@ -72,8 +74,6 @@ class BatchArray {
     void _ReserveObjects(uint batchIndex, uint objectCount);
     void _ShrinkToFit(uint batchIndex);
 
-    uint AddTransparentBatch(Mesh *mesh, Material *material, uint objectByteSize);
-
     uint _GetObjectCapacity(uint batchIndex);
     uint _GetObjectCount(uint batchIndex);
 
@@ -81,9 +81,6 @@ class BatchArray {
     uint GetDrawCall(Mesh *mesh, Material *material);
     void InsertDrawCall(uint index, Mesh *mesh, Material *material);
     void DeleteDrawCall(uint id);
-
-    // uint AddOrGetDrawCall(Mesh *mesh, Material *material);
-    // uint AddOrGetTransparentDrawCall(Mesh *mesh, Material *material);
 
     friend RenderObject;
     void AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize);
@@ -104,6 +101,7 @@ class BatchArray {
     std::vector<int> drawCallInstanceCount;
     std::vector<std::tuple<uint, uint>> drawCallMaterialIndices;
 
+    // Fix: Is this even used really????
     RenderBuffer drawCallBuffer;
 
     std::vector<Batch> batches;
@@ -111,4 +109,14 @@ class BatchArray {
     std::vector<std::vector<RenderObject *>> renderObjects;
     RenderBuffer batchBuffer;
     RenderBuffer objectBuffer;
+
+    // enum BatchTableColumn : size_t {
+    //     ObjectDataOffset,
+    //     FirstObjectIndex,
+    //     ObjectDataElementSize,
+    //     DrawCall,
+    //     Lods,
+    // };
+
+    gpuDB::Table<gpuDB::Chunk<uint, uint, uint, uint, uint[4]>, gpuDB::Chunk<RenderObject *, uint>> batchTable;
 };

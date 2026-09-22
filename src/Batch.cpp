@@ -136,7 +136,7 @@ uint BatchArray::_Add(Mesh *mesh, Material *material, uint objectByteSize) {
     objectBuffer.Allocate(0, objectByteSize);
 
     Batch batch;
-    batch.objectDataOffset = objectBuffer.Offset(batches.size()) / objectBuffer.Alignment(batches.size());
+    batch.objectDataOffset = objectBuffer.Offset(batches.size()) / std::max(objectBuffer.Alignment(batches.size()), 1u);
     batch.firstObjectIndex = totalObjects;
     batch.objectDataElementSize = objectByteSize;
     batch.drawCall = index;
@@ -196,12 +196,11 @@ void BatchArray::_Remove(uint index) {
         DeleteDrawCall(*drawCall);
 
     // Delete objects.
-
     int objectCount = renderObjects[index].size();
     for (int i = index + 1; i < batches.size(); i++) {
         for (int j = 0; j < renderObjects[i].size(); j++) renderObjects[i][j]->batchIndex--;
 
-        batches[i].objectDataOffset = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
+        batches[i].objectDataOffset = objectBuffer.Offset(i) / std::max(objectBuffer.Alignment(i), 1u);
         batches[i].firstObjectIndex -= objectCount;
         batchBuffer.Write(i, batches[i].objectDataOffset, offsetof(Batch, objectDataOffset));
         batchBuffer.Write(i, batches[i].firstObjectIndex, offsetof(Batch, firstObjectIndex));
@@ -217,9 +216,10 @@ void BatchArray::_Remove(uint index) {
 
 void BatchArray::_SetLOD(uint batchIndex, const std::vector<std::tuple<class Mesh *, class Material *>> &lods) {
     assert(batchIndex < batches.size() && "Invalid Batch ID.");
-    assert(lods.size() < 4 && "LOD count has to be less than 4.");
+    assert(lods.size() <= 4 && "LOD count has to be less than or equal 4.");
     assert(batches[batchIndex].lods[0] == -1U && "LOD changing has to be implemented.");
 
+    int objectCapacity = GetObjectCapacity(batchIndex);
     auto &batch = batches[batchIndex];
     for (int i = 0; i < lods.size(); i++) {
         auto &&[mesh, material] = lods[i];
@@ -249,7 +249,9 @@ void BatchArray::_SetLOD(uint batchIndex, const std::vector<std::tuple<class Mes
         }
 
         batch.lods[i] = index;
+        batchBuffer.Write(batchIndex, batch.lods, offsetof(Batch, lods));
     }
+    _ReserveObjects(batchIndex, objectCapacity);
 }
 
 void BatchArray::_ReserveObjects(uint index, uint objectCount) {
@@ -260,7 +262,7 @@ void BatchArray::_ReserveObjects(uint index, uint objectCount) {
     renderObjects[index].reserve(objectCount);
     objectBuffer.Reallocate(index, objectBuffer.Alignment(index) * objectCount);
     for (int i = index + 1; i < batches.size(); i++) {
-        batches[i].objectDataOffset = objectBuffer.Offset(i) / objectBuffer.Alignment(i);
+        batches[i].objectDataOffset = objectBuffer.Offset(i) / std::max(objectBuffer.Alignment(i), 1u);
         batchBuffer.Write(i, batches[i].objectDataOffset, offsetof(Batch, objectDataOffset));
     }
 
@@ -311,7 +313,7 @@ void BatchArray::_ShrinkToFit(uint index) {
 
 uint BatchArray::_GetObjectCapacity(uint index) {
     assert(index < batches.size() && "Invalid Batch ID.");
-    return drawCallInstanceCount[index];
+    return drawCallInstanceCount[batches[index].drawCall];
 }
 
 uint BatchArray::_GetObjectCount(uint index) {
@@ -362,7 +364,8 @@ void BatchArray::InsertDrawCall(uint index, Mesh *mesh, Material *material) {
     drawCall.materialIndex = 0;
     if (materialBuffer.Alignment(material->index) != 0)
         drawCall.materialIndex =
-            materialBuffer.Offset(material->index) / materialBuffer.Alignment(material->index) + material->variant;
+            materialBuffer.Offset(material->index) / std::max(materialBuffer.Alignment(material->index), 1u) +
+            material->variant;
     drawCallBuffer.Write(index, drawCall);
 
     drawCalls.emplace(drawCalls.begin() + index, std::move(drawCall));
@@ -476,7 +479,7 @@ void BatchArray::RemoveObject(RenderObject *renderObject) {
         }
     }
 
-    if (renderObjects[index].size() == 0) Remove(index);
+    // if (renderObjects[index].size() == 0) Remove(index);
 }
 
 void BatchArray::NotifyMaterialDestroy(uint index) {
@@ -488,9 +491,10 @@ void BatchArray::NotifyMaterialDestroy(uint index) {
         if (matIndex > index) {
             matIndex--;
             uint id = &material - &drawCallMaterialIndices[0];
-            drawCalls[id].materialIndex = Material::materialArray->materialBuffer.Offset(matIndex) /
-                                              Material::materialArray->materialBuffer.Alignment(matIndex) +
-                                          variant;
+            drawCalls[id].materialIndex =
+                Material::materialArray->materialBuffer.Offset(matIndex) /
+                    std::max(Material::materialArray->materialBuffer.Alignment(matIndex), 1u) +
+                variant;
 
             drawCallBuffer.Write(id, drawCalls[id].materialIndex, offsetof(PartialDrawCall, materialIndex));
         }
@@ -508,9 +512,10 @@ void BatchArray::NotifyVariantDestroy(uint materialIndex, uint index) {
         if (variant > index) {
             variant--;
             uint id = &material - &drawCallMaterialIndices[0];
-            drawCalls[id].materialIndex = Material::materialArray->materialBuffer.Offset(matIndex) /
-                                              Material::materialArray->materialBuffer.Alignment(matIndex) +
-                                          variant;
+            drawCalls[id].materialIndex =
+                Material::materialArray->materialBuffer.Offset(matIndex) /
+                    std::max(Material::materialArray->materialBuffer.Alignment(matIndex), 1u) +
+                variant;
 
             drawCallBuffer.Write(id, drawCalls[id].materialIndex, offsetof(PartialDrawCall, materialIndex));
         }

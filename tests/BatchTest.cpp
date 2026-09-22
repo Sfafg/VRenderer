@@ -53,10 +53,10 @@ void Check(
             s += ", DrawCall mismatch";
             for (auto &&d : batchArray.drawCalls) {
 
-                extra += std::string("DrawCall:\n") + std::string("\tIndexCount: ") + std::to_string(d.indexCount) +
-                         std::string("\n") + std::string("\tInstanceCount: ") + std::to_string(d.instanceCount) +
-                         std::string("\n") + std::string("\tFirstIndex: ") + std::to_string(d.firstIndex) +
-                         std::string("\n") + std::string("\tVertexOffset: ") + std::to_string(d.vertexOffset) +
+                extra += std::string("DrawCall:\n") + std::string("\tIndexCount: ") + std::to_string(d.firstInstance) +
+                         std::string("\n") + std::string("\tInstanceCount: ") + std::to_string(d.firstInstance) +
+                         std::string("\n") + std::string("\tFirstIndex: ") + std::to_string(d.firstInstance) +
+                         std::string("\n") + std::string("\tVertexOffset: ") + std::to_string(d.firstInstance) +
                          std::string("\n") + std::string("\tFirstInstance: ") + std::to_string(d.firstInstance) +
                          std::string("\n") + std::string("\tMaterialIndex: ") + std::to_string(d.materialIndex) +
                          std::string("\n") + std::string("\tMeshIndex: ") + std::to_string(d.meshIndex) +

@@ -56,24 +56,75 @@ uint hash1D(uint x) {
     return x;
 }
 
-float noise1D(float x) { return hash1D(uint(x * 4294967295.0)) / 4294967295.0 * 2 - 1; }
-vec2 noise2D(vec2 x) { return vec2(noise1D(x.x), noise1D(x.y)); }
+float noise1D(uint x) { return hash1D(x) / 4294967295.0 * 2 - 1; }
+vec2 noise2D(uvec2 x) { return vec2(noise1D(x.x), noise1D(x.y)); }
 
-float ShadowDepth(vec3 lightLocalFragPosition, vec2 offset) {
-    float lightDepth = texture(shadowMap, lightLocalFragPosition.xy * 0.5 + 0.5 + offset).r;
-    float shadowDistance = lightLocalFragPosition.z - lightDepth;
-    if (shadowDistance < 0) shadowDistance = 0;
-    return shadowDistance;
+// float ShadowDepth(vec3 lightLocalFragPosition, vec2 offset) {
+//     float shadowDepth = texture(shadowMap, lightLocalFragPosition.xy * 0.5 + 0.5 + offset).r;
+//     float lightDistance = lightLocalFragPosition.z - lightDepth;
+//     if (lightDistance < 0) shadowDepth = 0;
+//     return shadowDistance;
+// }
+
+const vec2 poissonDisk[32] = vec2[](
+    vec2(-0.940, -0.399), vec2(0.945, -0.768), vec2(-0.094, 0.929), vec2(0.345, 0.293), vec2(-0.915, 0.457),
+    vec2(0.505, -0.068), vec2(-0.565, -0.859), vec2(0.575, 0.879), vec2(-0.183, 0.289), vec2(0.812, 0.397),
+    vec2(-0.481, 0.642), vec2(0.066, -0.509), vec2(-0.705, -0.159), vec2(0.240, -0.924), vec2(0.156, 0.724),
+    vec2(-0.337, -0.141), vec2(0.710, -0.537), vec2(-0.783, 0.779), vec2(0.423, 0.728), vec2(-0.059, -0.846),
+    vec2(-0.339, 0.930), vec2(0.921, 0.038), vec2(-0.831, -0.638), vec2(0.729, 0.693), vec2(-0.691, 0.219),
+    vec2(0.004, 0.059), vec2(0.285, -0.642), vec2(-0.236, 0.531), vec2(0.614, -0.315), vec2(-0.470, -0.504),
+    vec2(0.390, -0.383), vec2(-0.027, 0.374)
+);
+
+float SampleShadowDepth(vec2 lightLocalFragPosition, vec2 offset) {
+    return texture(shadowMap, lightLocalFragPosition.xy * 0.5 + 0.5 + offset).r;
+}
+
+float EstimatePenumbraWidth() {
+    int SAMPLE_COUNT = 20;
+    float LIGHT_WIDTH = 10;
+    float receiverDepth = fragLightPosition.z;
+    float blockerDepth = 0;
+    float blockerPointCount = 0;
+    float searchRadius = LIGHT_WIDTH / receiverDepth / 4096.0;
+
+    float angle = noise1D(hash1D(int(fragPosition.x * 7919.3)) + hash1D(int(fragPosition.y * 7919.3))) * 3.14;
+    mat2 rotationMatrix = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    for (int i = 0; i < SAMPLE_COUNT; i++) {
+        vec2 coords = rotationMatrix * poissonDisk[i];
+        float candidateDepth = SampleShadowDepth(fragLightPosition.xy, coords * searchRadius);
+        if (candidateDepth < receiverDepth) {
+            blockerDepth += candidateDepth;
+            blockerPointCount++;
+        }
+    }
+    if (blockerPointCount == 0) return 0;
+    blockerDepth /= blockerPointCount;
+
+    return (receiverDepth - blockerDepth) * LIGHT_WIDTH / blockerDepth * 2;
+}
+
+float PCF() {
+    int SAMPLE_COUNT = 20;
+    float penumbraWidth = EstimatePenumbraWidth() + 0.15;
+    float receiverDepth = fragLightPosition.z;
+    int blockedPointCount = 0;
+
+    float angle = noise1D(hash1D(int(fragPosition.x * 7919.3)) + hash1D(int(fragPosition.y * 7919.3))) * 3.14;
+    mat2 rotationMatrix = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    for (int i = 0; i < SAMPLE_COUNT; i++) {
+        vec2 coords = rotationMatrix * poissonDisk[i];
+        float candidateDepth = SampleShadowDepth(fragLightPosition.xy, coords / 4096.0 * penumbraWidth);
+        if (candidateDepth < receiverDepth) blockedPointCount++;
+    }
+
+    return 1.0 - blockedPointCount / float(SAMPLE_COUNT);
 }
 
 void main() {
     float specularStrength = 0.5;
-
     float ambientStrength = 0.1;
-    // float ambientFactor = max(0, dot(normal, vec3(0, 0, 1)));
-    // vec3 groundColor = vec3(0.5, 0.3, 0);
-    // vec3 skyColor = vec3(0.2, 0.7, 1);
-    vec3 ambient = lightColor * ambientStrength; // mix(groundColor, skyColor, ambientFactor) *
+    vec3 ambient = lightColor * ambientStrength;
 
     float diff = max(dot(normal, -lightDirection), 0.0);
     vec3 diffuse = diff * lightColor;
@@ -84,29 +135,8 @@ void main() {
     float spec = pow(max(dot(normal, halfDir), 0.0), shininess);
     vec3 specular = specularStrength * spec * lightColor;
 
-    vec3 lightLocalFragPos = fragLightPosition.xyz / fragLightPosition.w;
-    const int resolution = 2;
-    float shadowDepth = 0;
-    int inShadow = 0;
-    for (int i = -resolution; i <= resolution; i++) {
-        for (int j = -resolution; j <= resolution; j++) {
-            float d = ShadowDepth(lightLocalFragPos, vec2(i * 8, j * 8) / resolution / 1024);
-            if (d != 0) inShadow++;
-            shadowDepth += d;
-        }
-    }
-    shadowDepth /= inShadow;
-    shadowDepth = max(shadowDepth, 0.01);
+    float lightPercentage = PCF();
 
-    float lightPercentage = 0;
-    for (int i = -resolution; i <= resolution; i++) {
-        for (int j = -resolution; j < resolution; j++) {
-            vec2 noise = noise2D(lightLocalFragPos.xy) * 0.0004;
-            vec2 offset = (vec2(i, j) / resolution / 1024 + noise) * shadowDepth * 20;
-            if (ShadowDepth(lightLocalFragPos, offset) == 0) lightPercentage++;
-        }
-    }
-    lightPercentage /= pow(resolution * 2 + 1, 2);
     vec3 shaded = (ambient + diffuse * lightPercentage) * color.rgb + specular * lightPercentage;
 
     shaded = linear_to_AgX(shaded);

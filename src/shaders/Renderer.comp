@@ -28,8 +28,8 @@ layout(push_constant) uniform PushConstants {
 
     float nearPlane;
     float farPlane;
-    float padding2;
-    float padding3;
+    int screenWidth;
+    int screenHeight;
 };
 
 layout(binding = 0) uniform sampler2D hiZBuffer;
@@ -108,10 +108,11 @@ void main() {
 
     // Lod selection.
     if (batch.lods[0] != -1U) {
-        uint lodCount = 1 + uint(batch.lods[1] != -1U) + uint(batch.lods[2] != -1U) + uint(batch.lods[3] != -1U);
         // TODO: Add dedicated buffer for transformation matrices and remove object data element size.
-        uint lodIndex = min(lodCount, uint(GetCameraDistance(batch, objectID, cameraPosition) / 100 * lodCount));
-        drawCall = batch.lods[lodIndex];
+        uint lodCount = 1 + 1 + uint(batch.lods[1] != -1U) + uint(batch.lods[2] != -1U) + uint(batch.lods[3] != -1U);
+        uint lodIndex =
+            min(lodCount, uint(pow(GetCameraDistance(batch, objectID, cameraPosition) / farPlane, 0.9) * lodCount));
+        if (lodIndex != 0) drawCall = batch.lods[lodIndex - 1];
     }
 
     // Visibility check.
@@ -122,18 +123,21 @@ void main() {
     if (any(greaterThan(minPoint, vec3(1))) || any(lessThan(maxPoint, vec3(-1)))) isVisible = false;
 
     vec4 aabb = vec4(minPoint.x, minPoint.y, maxPoint.x, maxPoint.y) * 0.5 + 0.5;
-    float objectScreenWidth = (aabb.z - aabb.x) * 1920;
-    float objectScreenHeight = (aabb.w - aabb.y) * 1080;
+    float objectScreenWidth = (aabb.z - aabb.x) * screenWidth;
+    float objectScreenHeight = (aabb.w - aabb.y) * screenHeight;
     float mipLevel = floor(log2(max(objectScreenWidth, objectScreenHeight)));
 
-    float hiZDepth = textureLod(hiZBuffer, (aabb.xy + aabb.zw) * 0.5, mipLevel + 1).x;
+    float hiZDepth = textureLod(hiZBuffer, (aabb.xy + aabb.zw) * 0.5, mipLevel).x;
     if (minPoint.z > hiZDepth) isVisible = false;
 
     if (!isVisible) return;
 
     // Transparency sorting.
+    const float MAX_TRANSPARENT_DISTANCE = 50;
     if (drawCall >= firstTransparentDrawCall) {
-        float d = pow(cameraDistane01, 1);
+        float d1 = min(GetCameraDistance(batch, objectID, cameraPosition) / MAX_TRANSPARENT_DISTANCE, 1);
+        float d = min(cameraDistane01 * farPlane / min(farPlane, MAX_TRANSPARENT_DISTANCE), 1);
+        d = mix(d, d1, 0.4);
         uint bucketID = min(uint(d * bucketCount), bucketCount - 1);
         bucketID = bucketCount - 1 - bucketID;
         drawCall += bucketID * transparentDrawCallCount;

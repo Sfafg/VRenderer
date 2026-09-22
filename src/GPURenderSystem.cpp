@@ -120,11 +120,11 @@ void GPURenderer::AttachBuffers(
 }
 
 GPURenderer::WriteInstructions::WriteInstructions(
-    GPURenderer &renderer, float cameraFarPlane, float cameraNearPlane, const glm::vec3 &cameraPosition,
-    const glm::mat4 &cameraViewProjection
+    GPURenderer &renderer, int screenWidth, int screenHeight, float cameraFarPlane, float cameraNearPlane,
+    const glm::vec3 &cameraPosition, const glm::mat4 &cameraViewProjection
 )
-    : renderer(renderer), cameraFarPlane(cameraFarPlane), cameraNearPlane(cameraNearPlane),
-      cameraPosition(cameraPosition), cameraViewProjection(cameraViewProjection) {}
+    : renderer(renderer), screenWidth(screenWidth), screenHeight(screenHeight), cameraFarPlane(cameraFarPlane),
+      cameraNearPlane(cameraNearPlane), cameraPosition(cameraPosition), cameraViewProjection(cameraViewProjection) {}
 
 void GPURenderer::WriteInstructions::operator()(vg::CmdBuffer &commandBuffer) const {
     assert(BatchArray::batchArray && "Current batchArray needs to be assigned!");
@@ -150,8 +150,9 @@ void GPURenderer::WriteInstructions::operator()(vg::CmdBuffer &commandBuffer) co
         cmd::PushConstants(
             renderer.gpuRenderer.GetPipelineLayout(), ShaderStage::Compute, 0,
             std::make_tuple(
-                0, 0, cameraFarPlane, cameraNearPlane, (int)BatchArray::batchArray->transparencyBucketCount,
-                cameraPosition, (int)BatchArray::batchArray->transparentDrawCallsCount,
+                screenWidth, screenHeight, cameraFarPlane, cameraNearPlane,
+                (int)BatchArray::batchArray->transparencyBucketCount, cameraPosition,
+                (int)BatchArray::batchArray->transparentDrawCallsCount,
                 (int)BatchArray::batchArray->firstTransparentDrawCall, (int)BatchArray::batchArray->totalObjects,
                 (int)BatchArray::batchArray->batches.size(), cameraViewProjection
             )

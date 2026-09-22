@@ -37,6 +37,8 @@ class GPURenderer {
 
     class WriteInstructions {
         GPURenderer &renderer;
+        int screenWidth;
+        int screenHeight;
         float cameraFarPlane;
         float cameraNearPlane;
         const glm::vec3 &cameraPosition;
@@ -44,8 +46,8 @@ class GPURenderer {
 
       public:
         WriteInstructions(
-            GPURenderer &renderer, float cameraFarPlane, float cameraNearPlane, const glm::vec3 &cameraPosition,
-            const glm::mat4 &cameraViewProjection
+            GPURenderer &renderer,int screenWidth,int screenHeight, float cameraFarPlane, float cameraNearPlane,
+            const glm::vec3 &cameraPosition, const glm::mat4 &cameraViewProjection
         );
 
       private:

@@ -11,6 +11,11 @@
 #include "VG/VG.h"
 #include <vector>
 
+/**
+ * @brief Rendering coordinator
+ *
+ * Coordinates rendering operatrions, manages rendering objects per a Window.
+ */
 class Renderer {
     friend BatchArray;
     friend RenderBuffer;
@@ -42,9 +47,10 @@ class Renderer {
     ~Renderer();
 
     void MakeCurrent();
+    void SetShouldRecreateFramebuffer();
     void RenderFrame(
-        vg::Queue &queue, const glm::mat4 &cameraViewProjection, const glm::vec3 &cameraPosition, float nearPlane,
-        float farPlane, const Renderer::LightData &data, bool updateDrawInstructions = true
+        int width, int height, vg::Queue &queue, const glm::mat4 &cameraViewProjection, const glm::vec3 &cameraPosition,
+        float nearPlane, float farPlane, const Renderer::LightData &data, bool updateDrawInstructions = true
     );
 
     void SetLightData(const LightData &data);

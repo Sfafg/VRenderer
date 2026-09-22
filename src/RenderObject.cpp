@@ -4,12 +4,10 @@
 #include "Renderer.h"
 #include "DebugRendering.h"
 
-RenderObject::RenderObject(
-    Mesh *mesh, Material *material, uint32_t objectByteSize, const void *data, bool debugObject
-) {
+RenderObject::RenderObject(Mesh *mesh, Material *material, ByteView data, bool debugObject) {
     assert(BatchArray::batchArray && "Current batchArray needs to be assigned!");
-    BatchArray::batchArray->AddObject(this, mesh, material, objectByteSize);
-    if (data) SetData(data, objectByteSize);
+    BatchArray::batchArray->AddObject(this, mesh, material, data.Size());
+    if (data.Ptr()) SetData(data.Ptr(), data.Size());
 }
 
 RenderObject::RenderObject() : batchIndex(-1U), objectDataIndex(0) {}
@@ -58,6 +56,10 @@ void RenderObject::ReadData(void *data) {
         batchIndex, data, BatchArray::batchArray->objectBuffer.Alignment(batchIndex),
         BatchArray::batchArray->objectBuffer.Alignment(batchIndex) * objectDataIndex
     );
+}
+
+void RenderObject::SetLOD(const std::vector<std::tuple<class Mesh *, class Material *>> &lods) {
+    BatchArray::SetLOD(batchIndex, lods);
 }
 
 void RenderObject::Reserve(class Mesh *mesh, class Material *material, uint objectCount, uint objectSize) {
