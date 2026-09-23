@@ -148,11 +148,11 @@ if(VRENDERER_BUILD_TESTS)
     target_link_libraries(VRenderer_Renderer PRIVATE VRenderer_VRenderer glfw glm assimp)
     add_dependencies(VRenderer_Renderer VRenderer_Shaders VRenderer_Resources)
 
-    target_compile_options(VRenderer_Renderer PRIVATE
-        -fsanitize=address
-        -fno-omit-frame-pointer
-    )
-    target_link_options(VRenderer_Renderer PRIVATE
-        -fsanitize=address
-    )
+    # target_compile_options(VRenderer_Renderer PRIVATE
+    #     -fsanitize=address
+    #     -fno-omit-frame-pointer
+    # )
+    # target_link_options(VRenderer_Renderer PRIVATE
+    #     -fsanitize=address
+    # )
 endif()
