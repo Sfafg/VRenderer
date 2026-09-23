@@ -147,7 +147,7 @@ Material::~Material() {
         materialArray->materials.erase(materialArray->materials.begin() + index);
         materialArray->isTransparent.erase(materialArray->isTransparent.begin() + index);
 
-        BatchArray::batchArray->NotifyMaterialDestroy(index);
+        BatchArray::batchArray->drawCallArray.NotifyMaterialDestroy(index);
         materialArray->materialBuffer.Deallocate(index);
         materialArray->subpasses.erase(materialArray->subpasses.begin() + index);
         for (int i = index; i < materialArray->materials.size(); i++)
@@ -155,7 +155,7 @@ Material::~Material() {
 
         Renderer::RecreateRenderpass();
     } else {
-        BatchArray::batchArray->NotifyVariantDestroy(index, variant);
+        BatchArray::batchArray->drawCallArray.NotifyVariantDestroy(index, variant);
         uint32_t variantSize = materialArray->materialBuffer.Alignment(index);
         uint32_t variantOffset = variant * variantSize;
         materialArray->materialBuffer.Erase(index, variantSize, variantOffset);
@@ -183,7 +183,15 @@ void Material::Read(void *data, uint32_t readSize, uint32_t offset) {
     );
 }
 
-bool Material::IsTransparent() {
+bool Material::IsTransparent() const {
     assert(materialArray && "MaterialArray needs to be assigned!");
     return materialArray->isTransparent[index];
+}
+
+uint Material::GetMaterialDataIndex() const {
+    assert(materialArray && "Current materialArray needs to be assigned!");
+
+    RenderBuffer &materialBuffer = Material::materialArray->materialBuffer;
+    if (materialBuffer.Alignment(index) == 0) return 0;
+    return materialBuffer.Offset(index) / materialBuffer.Alignment(index) + variant;
 }

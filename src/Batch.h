@@ -1,12 +1,13 @@
 #pragma once
 #include "RenderBuffer.h"
-#include <unordered_map>
+#include "DrawCallArray.h"
 
 class Material;
 class Mesh;
 class RenderObject;
 
 class BatchArray {
+    friend class DrawCallArray;
     friend class GPURenderSystem;
     friend class Renderer;
 
@@ -44,29 +45,10 @@ class BatchArray {
         uint lods[4];
     };
 
-    struct DrawCall {
-        uint indexCount = 0;
-        uint instanceCount = 0;
-        uint firstIndex = 0;
-        uint vertexOffset = 0;
-        uint firstInstance = 0;
-        uint materialIndex = 0;
-        uint meshIndex = 0;
-    };
-
-    struct PartialDrawCall {
-        uint firstInstance = 0;
-        uint materialIndex = 0;
-        uint meshIndex = 0;
-
-        bool operator==(const std::tuple<Material *, Mesh *> &o) const;
-        bool operator<(const std::tuple<Material *, Mesh *> &o) const;
-    };
-
   private:
     bool _Exists(Mesh *mesh, Material *material);
     uint _Add(Mesh *mesh, Material *material, uint objectByteSize);
-    uint _Get(Mesh *mesh, Material *material);
+    uint _Get(Mesh *mesh, Material *material) const;
     void _Remove(uint batchIndex);
     void _SetLOD(uint batchIndex, const std::vector<std::tuple<class Mesh *, class Material *>> &lods);
     void _ReserveObjects(uint batchIndex, uint objectCount);
@@ -76,31 +58,15 @@ class BatchArray {
     uint _GetObjectCount(uint batchIndex);
 
   private:
-    uint GetDrawCall(Mesh *mesh, Material *material);
-    void InsertDrawCall(uint index, Mesh *mesh, Material *material);
-    void DeleteDrawCall(uint id);
-
     friend RenderObject;
     void AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize);
     void RemoveObject(RenderObject *renderObject);
 
-    friend Mesh;
-    friend Material;
-    void NotifyMaterialDestroy(uint index);
-    void NotifyVariantDestroy(uint materialIndex, uint index);
-    void NotifyMeshDestroy(uint index);
+    void NotifyDrawCallInsert(uint index);
+    void NotifyDrawCallDestroy(uint index);
 
-  private:
   public:
-    uint transparencyBucketCount = 0;
-    uint firstTransparentDrawCall = 0;
-    uint transparentDrawCallsCount = 0;
-    std::vector<PartialDrawCall> drawCalls;
-    std::vector<int> drawCallInstanceCount;
-    std::vector<std::tuple<uint, uint>> drawCallMaterialIndices;
-
-    // Fix: Is this even used really????
-    RenderBuffer drawCallBuffer;
+    DrawCallArray drawCallArray;
 
     std::vector<Batch> batches;
     uint totalObjects = 0;

@@ -3,7 +3,7 @@
 #include "Mesh.h"
 #include "Material.h"
 #include "Renderer.h"
-#include <algorithm>
+#include "DrawCallArray.h"
 using namespace vg;
 
 BatchArray *BatchArray::batchArray = nullptr;
@@ -54,27 +54,19 @@ uint BatchArray::GetObjectCount(uint batchIndex) {
 }
 uint BatchArray::GetTotalInstanceCount() {
     assert(batchArray && "Current batchArray needs to be assigned!");
-    uint sum = 0;
-    for (auto c : batchArray->drawCallInstanceCount) sum += c;
-    return sum;
+    return batchArray->drawCallArray.GetTotalInstanceCount();
 }
 
 BatchArray::BatchArray() {}
 
 BatchArray::BatchArray(int maxFramesInFlight, uint transparencyBucketCount)
-    : transparencyBucketCount(transparencyBucketCount) {
-    drawCallBuffer = RenderBuffer(maxFramesInFlight, {BufferUsage::StorageBuffer, BufferUsage::IndirectBuffer}, 0);
+    : drawCallArray(maxFramesInFlight, transparencyBucketCount) {
     batchBuffer = RenderBuffer(maxFramesInFlight, BufferUsage::StorageBuffer, 0);
     objectBuffer = RenderBuffer(maxFramesInFlight, BufferUsage::StorageBuffer, 0);
 }
 
 BatchArray::BatchArray(BatchArray &&o) : BatchArray() {
-    std::swap(transparencyBucketCount, o.transparencyBucketCount);
-    std::swap(firstTransparentDrawCall, o.firstTransparentDrawCall);
-    std::swap(transparentDrawCallsCount, o.transparentDrawCallsCount);
-    std::swap(drawCalls, o.drawCalls);
-    std::swap(drawCallMaterialIndices, o.drawCallMaterialIndices);
-    std::swap(drawCallBuffer, o.drawCallBuffer);
+    std::swap(drawCallArray, o.drawCallArray);
     std::swap(batches, o.batches);
     std::swap(totalObjects, o.totalObjects);
     std::swap(renderObjects, o.renderObjects);
@@ -84,13 +76,7 @@ BatchArray::BatchArray(BatchArray &&o) : BatchArray() {
 
 BatchArray &BatchArray::operator=(BatchArray &&o) {
     if (this == &o) return *this;
-
-    std::swap(transparencyBucketCount, o.transparencyBucketCount);
-    std::swap(firstTransparentDrawCall, o.firstTransparentDrawCall);
-    std::swap(transparentDrawCallsCount, o.transparentDrawCallsCount);
-    std::swap(drawCalls, o.drawCalls);
-    std::swap(drawCallMaterialIndices, o.drawCallMaterialIndices);
-    std::swap(drawCallBuffer, o.drawCallBuffer);
+    std::swap(drawCallArray, o.drawCallArray);
     std::swap(batches, o.batches);
     std::swap(totalObjects, o.totalObjects);
     std::swap(renderObjects, o.renderObjects);
@@ -105,31 +91,9 @@ BatchArray::~BatchArray() {}
 bool BatchArray::_Exists(Mesh *mesh, Material *material) { return Get(mesh, material) != -1U; }
 
 uint BatchArray::_Add(Mesh *mesh, Material *material, uint objectByteSize) {
-    uint index = GetDrawCall(mesh, material);
-    bool isTransparent = material->IsTransparent();
-
-    if (index == -1U) {
-        std::tuple<Material *, Mesh *> key(material, mesh);
-        std::span<PartialDrawCall> search = {drawCalls.begin(), drawCalls.begin() + firstTransparentDrawCall};
-        if (isTransparent)
-            search = {
-                drawCalls.begin() + firstTransparentDrawCall,
-                drawCalls.begin() + firstTransparentDrawCall + transparentDrawCallsCount
-            };
-
-        auto it = std::lower_bound(search.begin(), search.end(), key, [](auto &a, auto &b) { return a < b; });
-        index = (it - search.begin()) + isTransparent * firstTransparentDrawCall;
-    }
-
-    InsertDrawCall(index, mesh, material);
-    if (isTransparent) {
-        transparentDrawCallsCount++;
-        uint ind = index;
-        for (int i = 0; i < transparencyBucketCount - 1; i++) {
-            ind += transparentDrawCallsCount;
-            InsertDrawCall(ind, mesh, material);
-        }
-    }
+    uint index = drawCallArray.GetDrawCall(mesh, material);
+    if (index == -1U) index = drawCallArray.GetInsertionIndex(mesh, material);
+    drawCallArray.InsertDrawCall(index, mesh, material);
 
     // Create Batch.
     batchBuffer.Allocate(sizeof(Batch), sizeof(Batch));
@@ -142,17 +106,16 @@ uint BatchArray::_Add(Mesh *mesh, Material *material, uint objectByteSize) {
     batch.drawCall = index;
     for (int i = 0; i < std::size(batch.lods); i++) batch.lods[i] = -1U;
     batchBuffer.Write(batches.size(), batch);
-
-    renderObjects.emplace_back(std::vector<RenderObject *>());
     batches.emplace_back(std::move(batch));
+    renderObjects.emplace_back(std::vector<RenderObject *>());
 
     return batches.size() - 1;
 }
 
-uint BatchArray::_Get(Mesh *mesh, Material *material) {
-    std::tuple<Material *, Mesh *> key(material, mesh);
+uint BatchArray::_Get(Mesh *mesh, Material *material) const {
+    std::tuple<const DrawCallArray *, const Material *, const Mesh *> key(&drawCallArray, material, mesh);
     for (int i = 0; i < batches.size(); i++)
-        if (drawCalls[batches[i].drawCall] == key) return i;
+        if (drawCallArray.drawCallReferences[batches[i].drawCall] == key) return i;
 
     return -1U;
 }
@@ -161,6 +124,7 @@ void BatchArray::_Remove(uint index) {
     assert(index < batches.size() && "Invalid BatchID.");
     auto &batch = batches[index];
 
+    // Get all draw calls to delete.
     std::vector<uint> drawCallsToDelete = {batch.drawCall};
     for (auto &&i : batch.lods) {
         if (i == -1U) break;
@@ -168,12 +132,13 @@ void BatchArray::_Remove(uint index) {
     }
     std::sort(drawCallsToDelete.begin(), drawCallsToDelete.end());
 
+    // Also add transparent draw calls.
     int initialDrawCalls = drawCallsToDelete.size();
-    for (int i = 1; i < transparencyBucketCount; i++) {
+    for (int i = 1; i < drawCallArray.transparencyBucketCount; i++) {
         for (int j = 0; j < initialDrawCalls; j++) {
             uint ind = drawCallsToDelete[j];
-            if (ind < firstTransparentDrawCall) continue;
-            drawCallsToDelete.push_back(ind + transparentDrawCallsCount * i);
+            if (ind < drawCallArray.firstTransparentIndex) continue;
+            drawCallsToDelete.push_back(ind + drawCallArray.transparentCount * i);
         }
     }
 
@@ -193,7 +158,7 @@ void BatchArray::_Remove(uint index) {
         if (drawCallsToDelete.empty()) break;
     }
     for (auto drawCall = drawCallsToDelete.rbegin(); drawCall != drawCallsToDelete.rend(); ++drawCall)
-        DeleteDrawCall(*drawCall);
+        drawCallArray.DeleteDrawCall(*drawCall);
 
     // Delete objects.
     int objectCount = renderObjects[index].size();
@@ -223,30 +188,9 @@ void BatchArray::_SetLOD(uint batchIndex, const std::vector<std::tuple<class Mes
     auto &batch = batches[batchIndex];
     for (int i = 0; i < lods.size(); i++) {
         auto &&[mesh, material] = lods[i];
-        uint index = GetDrawCall(mesh, material);
-
-        bool isTransparent = material->IsTransparent();
-
-        if (index == -1U) {
-            std::tuple<Material *, Mesh *> key(material, mesh);
-            std::span<PartialDrawCall> search = {drawCalls.begin(), drawCalls.begin() + firstTransparentDrawCall};
-            if (isTransparent)
-                search = {
-                    drawCalls.begin() + firstTransparentDrawCall,
-                    drawCalls.begin() + firstTransparentDrawCall + transparentDrawCallsCount
-                };
-
-            auto it = std::lower_bound(search.begin(), search.end(), key, [](auto &a, auto &b) { return a < b; });
-            index = (it - search.begin()) + isTransparent * firstTransparentDrawCall;
-        }
-        InsertDrawCall(index, mesh, material);
-        if (isTransparent) {
-            uint ind = index;
-            for (int i = 0; i < transparencyBucketCount - 1; i++) {
-                ind += transparentDrawCallsCount;
-                InsertDrawCall(ind, mesh, material);
-            }
-        }
+        uint index = drawCallArray.GetDrawCall(mesh, material);
+        if (index == -1U) index = drawCallArray.GetInsertionIndex(mesh, material);
+        drawCallArray.InsertDrawCall(index, mesh, material);
 
         batch.lods[i] = index;
         batchBuffer.Write(batchIndex, batch.lods, offsetof(Batch, lods));
@@ -268,34 +212,30 @@ void BatchArray::_ReserveObjects(uint index, uint objectCount) {
 
     // Reserve objects for drawCalls.
     uint minDrawCallID = batch.drawCall;
-    drawCallInstanceCount[batch.drawCall] = objectCount;
-    if (batch.drawCall >= firstTransparentDrawCall) {
+    drawCallArray.drawCallData[batch.drawCall].instanceCapacity = objectCount;
+    if (batch.drawCall >= drawCallArray.firstTransparentIndex) {
         uint ind = batch.drawCall;
-        for (int i = 0; i < transparencyBucketCount - 1; i++) {
-            ind += transparentDrawCallsCount;
-            drawCallInstanceCount[ind] = objectCount;
+        for (int i = 0; i < drawCallArray.transparencyBucketCount - 1; i++) {
+            ind += drawCallArray.transparentCount;
+            drawCallArray.drawCallData[ind].instanceCapacity = objectCount;
         }
     }
 
     for (auto &lod : batch.lods) {
         if (lod == -1U) break;
 
-        drawCallInstanceCount[lod] = objectCount;
-        if (lod >= firstTransparentDrawCall) {
+        drawCallArray.drawCallData[lod].instanceCapacity = objectCount;
+        if (lod >= drawCallArray.firstTransparentIndex) {
             uint ind = lod;
-            for (int i = 0; i < transparencyBucketCount - 1; i++) {
-                ind += transparentDrawCallsCount;
-
-                drawCallInstanceCount[ind] = objectCount;
+            for (int i = 0; i < drawCallArray.transparencyBucketCount - 1; i++) {
+                ind += drawCallArray.transparentCount;
+                drawCallArray.drawCallData[ind].instanceCapacity = objectCount;
             }
         }
         minDrawCallID = std::min(minDrawCallID, lod);
     }
 
-    for (int i = minDrawCallID + 1; i < drawCalls.size(); i++) {
-        drawCalls[i].firstInstance = drawCalls[i - 1].firstInstance + drawCallInstanceCount[i - 1];
-        drawCallBuffer.Write(i, drawCalls[i].firstInstance, offsetof(PartialDrawCall, firstInstance));
-    }
+    drawCallArray.UpdateFirstInstance(minDrawCallID + 1, drawCallArray.drawCallReferences.size() - 1);
 }
 
 void BatchArray::_ShrinkToFit(uint index) {
@@ -313,129 +253,12 @@ void BatchArray::_ShrinkToFit(uint index) {
 
 uint BatchArray::_GetObjectCapacity(uint index) {
     assert(index < batches.size() && "Invalid Batch ID.");
-    return drawCallInstanceCount[batches[index].drawCall];
+    return drawCallArray.drawCallData[batches[index].drawCall].instanceCapacity;
 }
 
 uint BatchArray::_GetObjectCount(uint index) {
     assert(index < batches.size() && "Invalid Batch ID.");
     return renderObjects[index].size();
-}
-
-bool BatchArray::PartialDrawCall::operator==(const std::tuple<Material *, Mesh *> &o) const {
-    assert(batchArray && "Current batchArray needs to be assigned!");
-
-    auto id = this - &batchArray->drawCalls[0];
-    auto [index, variant] = batchArray->drawCallMaterialIndices[id];
-    return index == std::get<Material *>(o)->index && variant == std::get<Material *>(o)->variant &&
-           meshIndex == std::get<Mesh *>(o)->index;
-}
-bool BatchArray::PartialDrawCall::operator<(const std::tuple<Material *, Mesh *> &o) const {
-    assert(batchArray && "Current batchArray needs to be assigned!");
-
-    auto id = this - &batchArray->drawCalls[0];
-    auto [index, variant] = batchArray->drawCallMaterialIndices[id];
-
-    if (index < std::get<Material *>(o)->index) return true;
-    if (index > std::get<Material *>(o)->index) return false;
-
-    if (variant < std::get<Material *>(o)->variant) return true;
-    if (variant > std::get<Material *>(o)->variant) return false;
-    return meshIndex < std::get<Mesh *>(o)->index;
-}
-
-uint BatchArray::GetDrawCall(Mesh *mesh, Material *material) {
-    assert(batchArray && "Current batchArray needs to be assigned!");
-    std::tuple<Material *, Mesh *> key(material, mesh);
-    auto it = std::find(drawCalls.begin(), drawCalls.end(), key);
-    if (it == drawCalls.end()) return -1U;
-    return it - drawCalls.begin();
-}
-
-void BatchArray::InsertDrawCall(uint index, Mesh *mesh, Material *material) {
-    assert(batchArray && "Current batchArray needs to be assigned!");
-
-    RenderBuffer &materialBuffer = Material::materialArray->materialBuffer;
-    drawCallBuffer.Allocate(sizeof(PartialDrawCall), sizeof(PartialDrawCall), index);
-    drawCallInstanceCount.insert(drawCallInstanceCount.begin() + index, 0);
-
-    PartialDrawCall drawCall;
-    drawCall.firstInstance = index > 0 ? drawCalls[index - 1].firstInstance + drawCallInstanceCount[index - 1] : 0;
-    drawCall.meshIndex = mesh->index;
-    drawCall.materialIndex = 0;
-    if (materialBuffer.Alignment(material->index) != 0)
-        drawCall.materialIndex =
-            materialBuffer.Offset(material->index) / std::max(materialBuffer.Alignment(material->index), 1u) +
-            material->variant;
-    drawCallBuffer.Write(index, drawCall);
-
-    drawCalls.emplace(drawCalls.begin() + index, std::move(drawCall));
-    drawCallMaterialIndices.insert(drawCallMaterialIndices.begin() + index, {material->index, material->variant});
-
-    if (!material->IsTransparent()) firstTransparentDrawCall++;
-
-    // Fix pointers.
-    for (int i = 0; i < batches.size(); i++) {
-        bool update = false;
-        if (batches[i].drawCall == -1U) continue;
-        if (batches[i].drawCall >= index) {
-            batches[i].drawCall++;
-            update = true;
-        }
-
-        for (int j = 0; j < 4; j++) {
-            if (batches[i].lods[j] == -1U) break;
-            if (batches[i].lods[j] >= index) {
-                batches[i].lods[j]++;
-                update = true;
-            }
-        }
-
-        if (update) batchBuffer.Write(i, batches[i]);
-    }
-
-    // Fix first instance.
-    for (int i = index + 1; i < drawCalls.size(); i++) {
-        drawCalls[i].firstInstance = drawCalls[i - 1].firstInstance + drawCallInstanceCount[i - 1];
-        drawCallBuffer.Write(i, drawCalls[i].firstInstance, offsetof(PartialDrawCall, firstInstance));
-    }
-}
-
-void BatchArray::DeleteDrawCall(uint id) {
-    if (id < firstTransparentDrawCall) firstTransparentDrawCall--;
-    else if (id < firstTransparentDrawCall + transparentDrawCallsCount) transparentDrawCallsCount--;
-
-    drawCallBuffer.Deallocate(id);
-    drawCallInstanceCount.erase(drawCallInstanceCount.begin() + id);
-
-    drawCalls.erase(drawCalls.begin() + id);
-    drawCallMaterialIndices.erase(drawCallMaterialIndices.begin() + id);
-
-    // Fix pointers.
-    for (int i = 0; i < batches.size(); i++) {
-        bool update = false;
-        if (batches[i].drawCall == -1U) continue;
-        if (batches[i].drawCall > id) {
-            batches[i].drawCall--;
-            update = true;
-        }
-
-        for (int j = 0; j < 4; j++) {
-            if (batches[i].lods[j] == -1U) break;
-            if (batches[i].lods[j] > id) {
-                batches[i].lods[j]--;
-                update = true;
-            }
-        }
-
-        if (update) batchBuffer.Write(i, batches[i]);
-    }
-
-    // Fix first instance.
-    for (int i = id; i < drawCalls.size(); i++) {
-        if (i == 0) drawCalls[i].firstInstance = 0;
-        else drawCalls[i].firstInstance = drawCalls[i - 1].firstInstance + drawCallInstanceCount[i - 1];
-        drawCallBuffer.Write(i, drawCalls[i].firstInstance, offsetof(PartialDrawCall, firstInstance));
-    }
 }
 
 void BatchArray::AddObject(RenderObject *renderObject, Mesh *mesh, Material *material, uint objectByteSize) {
@@ -482,53 +305,44 @@ void BatchArray::RemoveObject(RenderObject *renderObject) {
     // if (renderObjects[index].size() == 0) Remove(index);
 }
 
-void BatchArray::NotifyMaterialDestroy(uint index) {
-    assert(Material::materialArray && "Current materialArray needs to be assigned!");
-
-    for (auto &material : drawCallMaterialIndices) {
-        auto &[matIndex, variant] = material;
-        // assert(matIndex != index && "Can not destroy material that is being used.");
-        if (matIndex > index) {
-            matIndex--;
-            uint id = &material - &drawCallMaterialIndices[0];
-            drawCalls[id].materialIndex =
-                Material::materialArray->materialBuffer.Offset(matIndex) /
-                    std::max(Material::materialArray->materialBuffer.Alignment(matIndex), 1u) +
-                variant;
-
-            drawCallBuffer.Write(id, drawCalls[id].materialIndex, offsetof(PartialDrawCall, materialIndex));
+void BatchArray::NotifyDrawCallInsert(uint index) {
+    for (int i = 0; i < batches.size(); i++) {
+        bool update = false;
+        if (batches[i].drawCall == -1U) continue;
+        if (batches[i].drawCall >= index) {
+            batches[i].drawCall++;
+            update = true;
         }
+
+        for (int j = 0; j < 4; j++) {
+            if (batches[i].lods[j] == -1U) break;
+            if (batches[i].lods[j] >= index) {
+                batches[i].lods[j]++;
+                update = true;
+            }
+        }
+
+        if (update) batchBuffer.Write(i, batches[i]);
     }
 }
 
-void BatchArray::NotifyVariantDestroy(uint materialIndex, uint index) {
-    assert(Material::materialArray && "Current batchArray needs to be assigned!");
-
-    for (auto &material : drawCallMaterialIndices) {
-        auto &[matIndex, variant] = material;
-        if (matIndex != materialIndex) continue;
-
-        // assert(variant != index && "Can not destroy material variant that is being used.");
-        if (variant > index) {
-            variant--;
-            uint id = &material - &drawCallMaterialIndices[0];
-            drawCalls[id].materialIndex =
-                Material::materialArray->materialBuffer.Offset(matIndex) /
-                    std::max(Material::materialArray->materialBuffer.Alignment(matIndex), 1u) +
-                variant;
-
-            drawCallBuffer.Write(id, drawCalls[id].materialIndex, offsetof(PartialDrawCall, materialIndex));
+void BatchArray::NotifyDrawCallDestroy(uint index) {
+    for (int i = 0; i < batches.size(); i++) {
+        bool update = false;
+        if (batches[i].drawCall == -1U) continue;
+        if (batches[i].drawCall > index) {
+            batches[i].drawCall--;
+            update = true;
         }
-    }
-}
 
-void BatchArray::NotifyMeshDestroy(uint index) {
-    for (auto &drawCall : drawCalls) {
-        // assert(drawCall.meshIndex != index && "Can not destroy mesh that is being used.");
-
-        if (drawCall.meshIndex > index) {
-            drawCall.meshIndex--;
-            drawCallBuffer.Write(index, drawCall.meshIndex, offsetof(PartialDrawCall, meshIndex));
+        for (int j = 0; j < 4; j++) {
+            if (batches[i].lods[j] == -1U) break;
+            if (batches[i].lods[j] > index) {
+                batches[i].lods[j]--;
+                update = true;
+            }
         }
+
+        if (update) batchBuffer.Write(i, batches[i]);
     }
 }

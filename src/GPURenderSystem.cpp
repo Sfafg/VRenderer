@@ -54,10 +54,10 @@ GPURenderer::GPURenderer(uint framesInFlight) {
 }
 
 void GPURenderer::UpdateBuffers(int totalInstanceCount, const vg::Buffer &partialDrawCalls) {
-    int drawCallCount = partialDrawCalls.GetSize() / sizeof(BatchArray::PartialDrawCall);
-    if (drawCallCount != drawCalls.GetSize() / sizeof(BatchArray::DrawCall)) {
+    int drawCallCount = partialDrawCalls.GetSize() / sizeof(DrawCallArray::DrawCallReferences);
+    if (drawCallCount != drawCalls.GetSize() / sizeof(DrawCallArray::DrawCall)) {
         vg::Buffer newBuffer(
-            drawCallCount * sizeof(BatchArray::DrawCall),
+            drawCallCount * sizeof(DrawCallArray::DrawCall),
             {BufferUsage::StorageBuffer, BufferUsage::IndirectBuffer, BufferUsage::TransferDst,
              BufferUsage::TransferSrc},
             SharingMode::Exclusive
@@ -136,9 +136,9 @@ void GPURenderer::WriteInstructions::operator()(vg::CmdBuffer &commandBuffer) co
         ),
         cmd::PushConstants(
             renderer.clearInstructions.GetPipelineLayout(), ShaderStage::Compute, 0,
-            (uint32_t)BatchArray::batchArray->drawCalls.size()
+            (uint32_t)BatchArray::batchArray->drawCallArray.drawCallReferences.size()
         ),
-        cmd::Dispatch(std::ceil(BatchArray::batchArray->drawCalls.size() / 64.0), 1, 1),
+        cmd::Dispatch(std::ceil(BatchArray::batchArray->drawCallArray.drawCallReferences.size() / 64.0), 1, 1),
         cmd::PipelineBarier(
             PipelineStage::ComputeShader, PipelineStage::ComputeShader, Dependency::ByRegion,
             {MemoryBarrier(Access::MemoryWrite, Access::MemoryRead)}
@@ -151,10 +151,11 @@ void GPURenderer::WriteInstructions::operator()(vg::CmdBuffer &commandBuffer) co
             renderer.gpuRenderer.GetPipelineLayout(), ShaderStage::Compute, 0,
             std::make_tuple(
                 screenWidth, screenHeight, cameraFarPlane, cameraNearPlane,
-                (int)BatchArray::batchArray->transparencyBucketCount, cameraPosition,
-                (int)BatchArray::batchArray->transparentDrawCallsCount,
-                (int)BatchArray::batchArray->firstTransparentDrawCall, (int)BatchArray::batchArray->totalObjects,
-                (int)BatchArray::batchArray->batches.size(), cameraViewProjection
+                (int)BatchArray::batchArray->drawCallArray.transparencyBucketCount, cameraPosition,
+                (int)BatchArray::batchArray->drawCallArray.transparentCount,
+                (int)BatchArray::batchArray->drawCallArray.firstTransparentIndex,
+                (int)BatchArray::batchArray->totalObjects, (int)BatchArray::batchArray->batches.size(),
+                cameraViewProjection
             )
         ),
         cmd::Dispatch(std::ceil(BatchArray::batchArray->totalObjects / 1024.0), 1, 1)

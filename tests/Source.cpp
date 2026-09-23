@@ -116,6 +116,9 @@ int main() {
         glfwGetFramebufferSize(window, &w, &h);
         std::this_thread::sleep_for(10ms);
 
+        cameraRotation = GetRotation(window, cameraRotation, 0.001f);
+        cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
+
         static float t = 0;
         t += 0.01;
         Debug::color = glm::vec4(0, 0, 1, 0.5);
@@ -124,8 +127,6 @@ int main() {
         Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
         Debug::color = glm::vec4(1, 0, 0, 0.5);
         Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
-        cameraRotation = GetRotation(window, cameraRotation, 0.001f);
-        cameraPos += cameraRotation * GetMoveDirection(window, 0.4f);
         Debug::color = glm::vec4(1, 0.4, 0.4, 0.1);
         Debug::DrawSphere(cameraPos, 0.1, 1000);
 

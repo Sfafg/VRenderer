@@ -18,7 +18,7 @@ class MaterialArray {
   private:
     friend class Renderer;
     friend class Material;
-    friend class BatchArray;
+    friend class DrawCallArray;
     RenderBuffer materialBuffer;
     std::vector<vg::Subpass> subpasses;
     std::vector<bool> isTransparent;
@@ -32,7 +32,7 @@ class Material {
   public:
     friend class Renderer;
     friend class RenderObject;
-    friend class Batch;
+    friend class DrawCallArray;
 
     static MaterialArray *materialArray;
 
@@ -105,5 +105,8 @@ class Material {
         Read(&t, sizeof(t), offset);
         return t;
     }
-    bool IsTransparent();
+    bool IsTransparent() const;
+
+  private:
+    uint GetMaterialDataIndex() const;
 };

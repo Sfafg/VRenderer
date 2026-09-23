@@ -72,6 +72,7 @@ float GetBoundingBoxInNDC(BatchInfo batch, uint objectID, out vec3 minPoint, out
     mat4 model = GetObjectMatrix(batch, objectID);
     mat4 localToNDC = cameraViewProjection * model;
 
+    // Why is this taking mesh from batch and not draw call?????
     MeshMetaData metaData = meshMetaData[drawCalls[batch.drawCall].meshIndex];
     vec3 bMin = metaData.boundsMin;
     vec3 bMax = metaData.boundsMax;
@@ -119,8 +120,7 @@ void main() {
     vec3 minPoint, maxPoint;
     float cameraDistane01 = GetBoundingBoxInNDC(batch, objectID, minPoint, maxPoint);
 
-    bool isVisible = true;
-    if (any(greaterThan(minPoint, vec3(1))) || any(lessThan(maxPoint, vec3(-1)))) isVisible = false;
+    if (any(greaterThan(minPoint, vec3(1))) || any(lessThan(maxPoint, vec3(-1)))) return;
 
     vec4 aabb = vec4(minPoint.x, minPoint.y, maxPoint.x, maxPoint.y) * 0.5 + 0.5;
     float objectScreenWidth = (aabb.z - aabb.x) * screenWidth;
@@ -128,9 +128,7 @@ void main() {
     float mipLevel = floor(log2(max(objectScreenWidth, objectScreenHeight)));
 
     float hiZDepth = textureLod(hiZBuffer, (aabb.xy + aabb.zw) * 0.5, mipLevel).x;
-    if (minPoint.z > hiZDepth) isVisible = false;
-
-    if (!isVisible) return;
+    if (minPoint.z > hiZDepth) return;
 
     // Transparency sorting.
     const float MAX_TRANSPARENT_DISTANCE = 50;
