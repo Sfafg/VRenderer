@@ -1,4 +1,5 @@
 #include "RenderBuffer.h"
+#include "Batch.h"
 
 RenderBuffer::RenderBuffer() {}
 
@@ -137,34 +138,14 @@ void RenderBuffer::Reallocate(uint32_t regionID, uint32_t newByteSize) {
     for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
 }
 
-void RenderBuffer::Deallocate(uint32_t regionID) { // ma dealokowac caly region
+void RenderBuffer::Deallocate(uint32_t regionID) {
     assert(regionID < sizes.size() && "Invalid regionID in RenderBuffer::Deallocate()");
-    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
+    if (sizes[regionID] != 0) Erase(regionID, sizes[regionID], 0);
 
-    uint32_t writeOffset = offsets[regionID];
-    uint32_t removedSize = sizes[regionID];
-
-    if (removedSize != 0)
-        for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
-    for (uint32_t i = regionID + 1; i < offsets.size(); i++) {
-        uint32_t padding = GetPadding(i, writeOffset);
-        writeOffset += padding;
-
-        if (sizes[i] != 0)
-            memcpy(stagingBuffer.MapMemory() + writeOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
-
-        offsets[i] = writeOffset;
-        writeOffset += sizes[i];
-    }
     sizes.erase(sizes.begin() + regionID);
     offsets.erase(offsets.begin() + regionID);
     alignments.erase(alignments.begin() + regionID);
-
-    // Korekta offsetów
-    for (uint32_t i = regionID; i < offsets.size(); ++i) {
-        if (i == 0) { continue; }
-        offsets[i] = offsets[i - 1] + sizes[i - 1] + GetPadding(i, offsets[i - 1] + sizes[i - 1]);
-    }
+    auto b = (class BatchArray::Batch *)stagingBuffer.MapMemory();
 }
 
 void RenderBuffer::Reserve(uint32_t capacity) {
@@ -185,7 +166,7 @@ void RenderBuffer::Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOf
         "eraseOffset + eraseSize exceeds region size in RenderBuffer::Erase()"
     );
     assert(eraseSize > 0 && "eraseSize must be greater than 0 in RenderBuffer::Erase()");
-    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents); // do czego to jest nwm
+    for (auto &b : bufferChangeFlag) b.Set(BufferChange::Contents);
 
     uint32_t regionOffset = offsets[regionID];
     uint32_t regionSize = sizes[regionID];
@@ -205,12 +186,11 @@ void RenderBuffer::Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOf
         uint32_t padding = GetPadding(i, baseOffset);
         baseOffset += padding;
 
-        // Przenieś dane regionu na nową pozycję
         memmove(stagingBuffer.MapMemory() + baseOffset, stagingBuffer.MapMemory() + offsets[i], sizes[i]);
 
-        // Aktualizuj offset regionu
         offsets[i] = baseOffset;
         baseOffset += sizes[i];
+        size = baseOffset;
     }
 }
 
