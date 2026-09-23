@@ -19,11 +19,6 @@ struct RAIIGLFW {
     ~RAIIGLFW();
 };
 
-struct Vertex {
-    glm::vec3 position;
-};
-
-// TODO: Fix memory issues when removing objects.
 // TODO: MultiDrawIndirect.
 
 GLFWwindow *CreateWindow();
@@ -94,8 +89,10 @@ int main() {
     renderObjects.erase(renderObjects.end() - monkeyCount, renderObjects.end());
     BatchArray::ShrinkToFit(BatchArray::Get(&monkey, &material));
 
-    // Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    // Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+
     // for (int i = 0; i < 1e6; i++) {
     //     Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
     //     Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);

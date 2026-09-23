@@ -1,7 +1,6 @@
 #version 450
 #include "DrawCall.glsl"
 
-// OPTYMIZATION: Might compress it a bit, to remove padding.
 struct MeshMetaData {
     vec3 boundsMin;
     float padding1;
@@ -109,7 +108,6 @@ void main() {
 
     // Lod selection.
     if (batch.lods[0] != -1U) {
-        // TODO: Add dedicated buffer for transformation matrices and remove object data element size.
         uint lodCount = 1 + 1 + uint(batch.lods[1] != -1U) + uint(batch.lods[2] != -1U) + uint(batch.lods[3] != -1U);
         uint lodIndex =
             min(lodCount, uint(pow(GetCameraDistance(batch, objectID, cameraPosition) / farPlane, 0.9) * lodCount));

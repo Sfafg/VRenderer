@@ -242,13 +242,10 @@ void BatchArray::_ShrinkToFit(uint index) {
     assert(index < batches.size() && "Invalid Batch ID.");
     uint objectCount = GetObjectCount(index);
     uint objectCapacity = GetObjectCapacity(index);
-    if (objectCount == 0) {
-        Remove(index);
-        return;
-    }
     if (objectCount >= objectCapacity) return;
 
     ReserveObjects(index, objectCount);
+    if (objectCount == 0) Remove(index);
 }
 
 uint BatchArray::_GetObjectCapacity(uint index) {

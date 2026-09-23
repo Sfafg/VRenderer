@@ -68,9 +68,10 @@ class BatchArray {
   public:
     DrawCallArray drawCallArray;
 
-    std::vector<Batch> batches;
     uint totalObjects = 0;
     std::vector<std::vector<RenderObject *>> renderObjects;
-    RenderBuffer batchBuffer;
     RenderBuffer objectBuffer;
+
+    std::vector<Batch> batches;
+    RenderBuffer batchBuffer;
 };

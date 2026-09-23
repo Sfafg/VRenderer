@@ -160,7 +160,6 @@ Material::~Material() {
         uint32_t variantOffset = variant * variantSize;
         materialArray->materialBuffer.Erase(index, variantSize, variantOffset);
 
-        // Zaktualizuj numery wariantów dla materiałów o wyższych wariantach
         for (int j = 0; j < materialArray->materials[index].size(); j++) materialArray->materials[index][j]->index--;
     }
     index = -1;
