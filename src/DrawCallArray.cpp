@@ -93,7 +93,7 @@ void DrawCallArray::DeleteDrawCall(uint id) {
 
     BatchArray::batchArray->NotifyDrawCallDestroy(id);
 
-    UpdateFirstInstance(id, drawCallReferences.size() - 1);
+    if (drawCallReferences.size() != 0) UpdateFirstInstance(id, drawCallReferences.size() - 1);
 }
 
 uint DrawCallArray::GetInsertionIndex(const Mesh *mesh, const Material *material) const {

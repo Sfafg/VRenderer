@@ -78,25 +78,23 @@ int main() {
         {{&monkeyLOD1, &material}, {&monkeyLOD2, &material}, {&monkeyLOD3, &material}, {&monkeyLOD4, &material}}
     );
 
-    int monkeyCount = 36;
-    BatchArray::ReserveObjects(BatchArray::Get(&monkey, &material), monkeyCount);
+    int monkeyCount = 3;
+    BatchArray::ReserveObjects(BatchArray::Add(&monkey, &material, sizeof(glm::mat4)), monkeyCount);
     int edgeSize = pow(monkeyCount, 1.0 / 2.0);
     for (int i = 0; i < monkeyCount; i++) {
-        glm::vec3 pos((i % edgeSize - edgeSize / 2) * 8, ((i / edgeSize) % edgeSize - edgeSize / 2) * 8, 10);
+        glm::vec3 pos((i % monkeyCount - edgeSize / 2.0) * 3, ((i / edgeSize) % edgeSize - edgeSize / 2.0) * 3, -2);
         glm::mat4 transform = glm::translate(glm::mat4(1), pos);
         renderObjects.emplace_back(RenderObject(&monkey, &material, transform));
     }
-    renderObjects.erase(renderObjects.end() - monkeyCount, renderObjects.end());
-    BatchArray::ShrinkToFit(BatchArray::Get(&monkey, &material));
 
-    Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
-    Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    Debug::color = glm::vec4(0, 0, 0, 1);
+    Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08) * 5.5), 3000);
+    Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08) * 5.5), 3000);
 
-    // for (int i = 0; i < 1e6; i++) {
-    //     Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
-    //     Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
-    // }
+    for (int i = 0; i < 1e5; i++) {
+        Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
+        Debug::DrawWireCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
+    }
 
     glm::vec3 cameraPos(0, -1, 0);
     glm::quat cameraRotation(1, 0, 0, 0);

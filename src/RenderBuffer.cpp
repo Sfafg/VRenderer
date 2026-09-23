@@ -190,8 +190,8 @@ void RenderBuffer::Erase(uint32_t regionID, uint32_t eraseSize, uint32_t eraseOf
 
         offsets[i] = baseOffset;
         baseOffset += sizes[i];
-        size = baseOffset;
     }
+    size = baseOffset;
 }
 
 void RenderBuffer::Write(uint32_t regionID, const void *data, uint32_t dataSize, uint32_t writeOffset) {
