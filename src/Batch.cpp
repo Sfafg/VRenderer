@@ -128,7 +128,7 @@ void BatchArray::_Remove(uint index) {
     std::vector<uint> drawCallsToDelete = {batch.drawCall};
     for (auto &&i : batch.lods) {
         if (i == -1U) break;
-        drawCallsToDelete.push_back(batch.lods[i]);
+        drawCallsToDelete.push_back(i);
     }
     std::sort(drawCallsToDelete.begin(), drawCallsToDelete.end());
 

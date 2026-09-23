@@ -40,15 +40,15 @@ layout(std430, binding = 4) buffer BatchDatas { float batchData[]; };
 layout(std430, binding = 5) readonly buffer MeshMetaDatas { MeshMetaData meshMetaData[]; };
 
 BatchInfo GetBatch(uint sourceObjectIndex) {
-    uint l = 0;
-    uint r = batchCount - 1;
-    while (l <= r) {
-        uint m = (r + l) / 2;
-        if (sourceObjectIndex > batchInfo[m].firstObjectIndex) l = m + 1;
-        else if (sourceObjectIndex < batchInfo[m].firstObjectIndex) r = m - 1;
-        else return batchInfo[m];
-    }
-    return batchInfo[r];
+    // uint l = 0;
+    // uint r = batchCount - 1;
+    // while (l <= r) {
+    //     uint m = (r + l) / 2;
+    //     if (sourceObjectIndex > batchInfo[m].firstObjectIndex) l = m + 1;
+    //     else if (sourceObjectIndex < batchInfo[m].firstObjectIndex) r = m - 1;
+    //     else return batchInfo[m];
+    // }
+    // return batchInfo[r];
 
     // Linear search.
     for (int i = 1; i < batchCount; i++)

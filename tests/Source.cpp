@@ -83,7 +83,7 @@ int main() {
         {{&monkeyLOD1, &material}, {&monkeyLOD2, &material}, {&monkeyLOD3, &material}, {&monkeyLOD4, &material}}
     );
 
-    int monkeyCount = 3'0;
+    int monkeyCount = 36;
     BatchArray::ReserveObjects(BatchArray::Get(&monkey, &material), monkeyCount);
     int edgeSize = pow(monkeyCount, 1.0 / 2.0);
     for (int i = 0; i < monkeyCount; i++) {
@@ -91,6 +91,8 @@ int main() {
         glm::mat4 transform = glm::translate(glm::mat4(1), pos);
         renderObjects.emplace_back(RenderObject(&monkey, &material, transform));
     }
+    renderObjects.erase(renderObjects.end() - monkeyCount, renderObjects.end());
+    BatchArray::ShrinkToFit(BatchArray::Get(&monkey, &material));
 
     // Debug::color = glm::vec4(randf(0.2, 1), randf(0.2, 1), randf(0.2, 1), 1);
     // Debug::DrawCube(glm::vec3(randf(-5, 5), randf(-5, 5), randf(-5, 5)), glm::vec3(randf(0.02, 0.08)), 1000);
@@ -122,13 +124,13 @@ int main() {
         static float t = 0;
         t += 0.01;
         Debug::color = glm::vec4(0, 0, 1, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
-        Debug::color = glm::vec4(0, 1, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
-        Debug::color = glm::vec4(1, 0, 0, 0.5);
-        Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
-        Debug::color = glm::vec4(1, 0.4, 0.4, 0.1);
-        Debug::DrawSphere(cameraPos, 0.1, 1000);
+        // Debug::DrawSphere(glm::vec3(3, 4, sin(t + 1)), 1);
+        // Debug::color = glm::vec4(0, 1, 0, 0.5);
+        // Debug::DrawSphere(glm::vec3(3, 2, sin(t + 2)), 1);
+        // Debug::color = glm::vec4(1, 0, 0, 0.5);
+        // Debug::DrawSphere(glm::vec3(3, 0, sin(t + 3)), 1);
+        // Debug::color = glm::vec4(1, 0.4, 0.4, 0.1);
+        // Debug::DrawSphere(cameraPos, 0.1, 1000);
 
         glm::mat4 proj = glm::perspective(glm::radians(90.0f), w / (float)h, nearPlane, farPlane);
         proj[1][1] *= -1;
