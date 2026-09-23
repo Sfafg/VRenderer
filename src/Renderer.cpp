@@ -99,7 +99,7 @@ void Renderer::RenderFrame(
     auto &indexBuffer = meshManager.indexBuffer;
     auto &meshDataBuffer = meshManager.meshDataBuffer;
     auto &objectBuffer = bManager.objectBuffer;
-    auto &drawCallBuffer = bManager.drawCallBuffer;
+    auto &drawCallBuffer = bManager.drawCallArray.drawCallReferencesBuffer;
     auto &batchBuffer = bManager.batchBuffer;
 
     if (bManager.batches.size() == 0) return;
@@ -440,8 +440,8 @@ void Renderer::DrawFromBuffer::operator()(vg::CmdBuffer &cmdBuffer) const {
 
     cmdBuffer.Append(BindPipeline(renderPass->GetPipelines()[0]));
     int subpassIndex = 0;
-    for (int i = 0; i < bManager.drawCalls.size(); i++) {
-        int materialIndex = std::get<0>(bManager.drawCallMaterialIndices[i]);
+    for (int i = 0; i < bManager.drawCallArray.drawCallReferences.size(); i++) {
+        int materialIndex = bManager.drawCallArray.drawCallData[i].materialIndex;
         for (; subpassIndex < materialIndex; subpassIndex++) {
             cmdBuffer.Append(NextSubpass(SubpassContents::Inline));
             if (subpassIndex == materialIndex - 1)
@@ -452,7 +452,7 @@ void Renderer::DrawFromBuffer::operator()(vg::CmdBuffer &cmdBuffer) const {
             PushConstants(
                 renderPass->GetPipelineLayouts()[0], ShaderStage::Vertex, sizeof(glm::mat4) + sizeof(glm::vec3), i
             ),
-            DrawIndexedIndirect(drawBuffer, sizeof(BatchArray::DrawCall) * i, 1, sizeof(BatchArray::DrawCall))
+            DrawIndexedIndirect(drawBuffer, sizeof(DrawCallArray::DrawCall) * i, 1, sizeof(DrawCallArray::DrawCall))
         );
     }
     for (; subpassIndex < currentRenderer->dataArrays.materialArray->subpasses.size() - 1; subpassIndex++)

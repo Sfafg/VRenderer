@@ -74,7 +74,7 @@ Mesh &Mesh::operator=(Mesh &&o) {
 Mesh::~Mesh() {
     if (index == -1U) return;
     assert(BatchArray::batchArray && "Current batchArray needs to be assigned!");
-    BatchArray::batchArray->NotifyMeshDestroy(index);
+    BatchArray::batchArray->drawCallArray.NotifyMeshDestroy(index);
 
     assert(meshArray && "Current meshArray needs to be assigned!");
     meshArray->meshDataBuffer.Deallocate(index);

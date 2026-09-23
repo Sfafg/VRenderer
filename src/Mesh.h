@@ -28,6 +28,7 @@ class Mesh {
     friend class Renderer;
     friend class RenderObject;
     friend class BatchArray;
+    friend class DrawCallArray;
     friend class GPURenderSystem;
 
     struct MeshMetaData {
