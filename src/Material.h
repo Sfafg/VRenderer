@@ -1,4 +1,5 @@
 #pragma once
+#include "Shader.h"
 #include "VG/VG.h"
 #include <vector>
 #include "RenderBuffer.h"
@@ -19,10 +20,28 @@ class MaterialArray {
     friend class Renderer;
     friend class Material;
     friend class DrawCallArray;
-    RenderBuffer materialBuffer;
-    std::vector<vg::Subpass> subpasses;
-    std::vector<bool> isTransparent;
+
+    struct MaterialInfo {
+        MaterialInfo(
+            vg::Shader &&vertexShader, vg::Shader &&fragmentShader, const vg::Subpass &subpass, bool isTransparent
+        );
+
+        MaterialInfo(const MaterialInfo &) = delete;
+        MaterialInfo(MaterialInfo &&) = default;
+        MaterialInfo &operator=(const MaterialInfo &) = delete;
+        MaterialInfo &operator=(MaterialInfo &&) = default;
+
+        vg::Subpass subpass;
+        vg::Shader vertexShader;
+        vg::Shader fragmentShader;
+        bool isTransparent;
+    };
+
+    std::vector<vg::Subpass> GetSubpasses() const;
+
+    std::vector<MaterialInfo> materialInfos;
     std::vector<std::vector<class Material *>> materials;
+    RenderBuffer materialBuffer;
 };
 
 /**
@@ -39,7 +58,7 @@ class Material {
     uint16_t index;
     uint16_t variant;
 
-    Material(bool isTransparent, vg::Subpass &&subpass, ByteView data);
+    Material(MaterialArray::MaterialInfo &&materialInfo, ByteView data);
 
   public:
     struct CreateInfo {
@@ -83,7 +102,7 @@ class Material {
         vg::VertexLayout &&vertexInput, vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState,
         vg::Rasterizer &&rasterizer, vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
         const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
-        uint32_t childrenCount, ByteView materialData = ByteView()
+        ByteView materialData = ByteView()
     );
 
     Material(

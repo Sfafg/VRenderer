@@ -1,5 +1,9 @@
 #include "Renderer.h"
 #include "GPURenderSystem.h"
+#include "Material.h"
+#include <ranges>
+#include <vector>
+
 using namespace vg;
 using namespace cmd;
 
@@ -335,16 +339,18 @@ void Renderer::RecreateRenderpass() {
 void Renderer::_RecreateRenderpass() {
     auto &materialManager = *dataArrays.materialArray;
 
-    if (materialManager.subpasses.size() == 0 || swapchain.GetImageCount() == 0) return;
+    if (materialManager.materialInfos.size() == 0 || swapchain.GetImageCount() == 0) return;
 
     vg::currentDevice->WaitUntilIdle();
-    std::vector<vg::SubpassDependency> dependencies(materialManager.subpasses.size());
-    for (int i = 0; i < materialManager.subpasses.size(); i++) {
+    std::vector<vg::SubpassDependency> dependencies(materialManager.materialInfos.size());
+    for (int i = 0; i < materialManager.materialInfos.size(); i++) {
         dependencies[i] = vg::SubpassDependency(
             i - 1, i, vg::PipelineStage::ColorAttachmentOutput, vg::PipelineStage::FragmentShader,
             vg::Access::ColorAttachmentWrite, vg::Access::InputAttachmentRead, {vg::Dependency::ByRegion}
         );
     }
+
+    std::vector<vg::Subpass> subpasses = Material::materialArray->GetSubpasses();
     renderPass = RenderPass(
         {Attachment(surface.GetFormat(), ImageLayout::PresentSrc),
          Attachment(depthImage.GetFormat(), ImageLayout::DepthStencilAttachmentOptimal)},
@@ -360,14 +366,15 @@ void Renderer::_RecreateRenderpass() {
               )}},
             {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(glm::vec3) + sizeof(uint)}}
         )),
-        materialManager.subpasses, dependencies
+        subpasses, dependencies
     );
 
-    for (int i = 0; i < materialManager.subpasses.size(); i++) {
-        materialManager.subpasses[i].colorAttachments = {};
-        materialManager.subpasses[i].depthStencilAttachment->index = 0;
-        materialManager.subpasses[i].graphicsPipeline.shaders.pop_back();
+    for (auto &subpass : subpasses) {
+        subpass.colorAttachments = {};
+        subpass.depthStencilAttachment->index = 0;
+        subpass.graphicsPipeline.shaders.pop_back();
     }
+
     depthOnlyPass = RenderPass(
         {Attachment(shadowImage.GetFormat(), ImageLayout::DepthStencilReadOnlyOptimal)},
         Vector<PipelineLayout>(PipelineLayout(
@@ -383,17 +390,9 @@ void Renderer::_RecreateRenderpass() {
             {{ShaderStage::Vertex, 0, sizeof(glm::mat4) + sizeof(glm::vec3) + sizeof(uint)}}
 
         )),
-        materialManager.subpasses, dependencies
+        subpasses, dependencies
     );
-    for (int i = 0; i < materialManager.subpasses.size(); i++) {
-        materialManager.subpasses[i].colorAttachments = {
-            vg::AttachmentReference(0, vg::ImageLayout::ColorAttachmentOptimal)
-        };
-        materialManager.subpasses[i].depthStencilAttachment->index = 1;
-        materialManager.subpasses[i].graphicsPipeline.shaders.resize(2);
-        materialManager.subpasses[i].graphicsPipeline.shaders[1] =
-            &materialManager.subpasses[i].graphicsPipeline.shaders_[1];
-    }
+
     // Create and allocate descriptor set layouts.
     std::vector<vg::DescriptorSetLayoutHandle> layouts(
         maxFramesInFlight, renderPass.GetPipelineLayouts()[0].GetDescriptorSets()[0]
@@ -455,7 +454,7 @@ void Renderer::DrawFromBuffer::operator()(vg::CmdBuffer &cmdBuffer) const {
             DrawIndexedIndirect(drawBuffer, sizeof(DrawCallArray::DrawCall) * i, 1, sizeof(DrawCallArray::DrawCall))
         );
     }
-    for (; subpassIndex < currentRenderer->dataArrays.materialArray->subpasses.size() - 1; subpassIndex++)
+    for (; subpassIndex < currentRenderer->dataArrays.materialArray->materialInfos.size() - 1; subpassIndex++)
         cmdBuffer.Append(NextSubpass(SubpassContents::Inline));
 }
 

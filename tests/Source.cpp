@@ -2,10 +2,22 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <type_traits>
+#include "Buffer.h"
+#include "CmdBuffer.h"
+#include "DebugRendering.h"
+#include "Enums.h"
+#include "ImageView.h"
+#include "Instance.h"
+#include "Material.h"
+#include "Mesh.h"
+#include "Sampler.h"
 #include "VRenderer/VRenderer.h"
+#include "RenderGraph.h"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 using namespace std::chrono_literals;
+using namespace vg;
 extern "C" {
 typedef struct VkInstance_T *VkInstance;
 typedef struct VkSurfaceKHR_T *VkSurfaceKHR;
@@ -59,6 +71,73 @@ int main() {
         ),
         {.cullMode = vg::CullMode::Back}, std::make_tuple(glm::vec3(0), 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f))
     );
+
+    RenderGraph graph;
+
+    graph.AddResource(Resource("VertexBuffer", Buffer(1, {BufferUsage::VertexBuffer, BufferUsage::TransferDst})));
+    graph.AddResource(Resource("IndexBuffer", Buffer(1, {BufferUsage::IndexBuffer, BufferUsage::TransferDst})));
+    graph.AddResource(Resource(
+        "ObjectInstanceMapping",
+        Buffer(1, {BufferUsage::StorageBuffer, BufferUsage::VertexBuffer, BufferUsage::TransferDst})
+    ));
+    graph.AddResource(Resource(
+        "DrawCallReferencesBuffer",
+        Buffer(1, {BufferUsage::StorageBuffer, BufferUsage::IndirectBuffer, BufferUsage::TransferDst})
+    ));
+    graph.AddResource(Resource(
+        "DrawCallBuffer", Buffer(1, {BufferUsage::StorageBuffer, BufferUsage::IndirectBuffer, BufferUsage::TransferDst})
+    ));
+    graph.AddResource(Resource("BatchBuffer", Buffer(1, {BufferUsage::StorageBuffer, BufferUsage::TransferDst})));
+    graph.AddResource(Resource("ObjectBuffer", Buffer(1, {BufferUsage::StorageBuffer, BufferUsage::TransferDst})));
+    graph.AddResource(Resource("MeshDataBuffer", Buffer(1, {BufferUsage::StorageBuffer, BufferUsage::TransferDst})));
+    graph.AddResource(
+        Resource("MaterialBuffer", vg::Buffer(1, {vg::BufferUsage::StorageBuffer, vg::BufferUsage::TransferDst}))
+    );
+    graph.AddResource(Resource(
+        "DepthBuffer", vg::Image({(uint)w, (uint)h}, vg::Format::D32SFLOAT, {vg::ImageUsage::DepthStencilAttachment}),
+        vg::ImageLayout::Undefined, vg::ImageLayout::DepthAttachmentOptimal, vg::Sampler(vg::Filter::Nearest)
+    ));
+
+    graph.AddPass(Pass("VertexBufferTransfer", {}, {"VertexBuffer"}, [&](vg::CmdBuffer &cmdBuffer) {
+        if (Mesh::meshArray->vertexBuffer.GetSize() != graph.GetResource("VertexBuffer").buffer.GetSize()) {
+            vg::Buffer newBuffer() graph.GetResource("VertexBuffer").buffer
+        }
+        cmdBuffer.Append(
+            vg::cmd::CopyBuffer(
+                Mesh::meshArray->vertexBuffer.GetBuffer(0), graph.GetResource("VertexBuffer").buffer,
+                {vg::BufferCopyRegion(graph.GetResource("VertexBuffer").buffer.GetSize())}
+            )
+        );
+    }));
+    graph.AddPass(Pass("IndexBufferTransfer", {}, {"IndexBuffer"}, [](vg::CmdBuffer &cmdBuffer) {}));
+    graph.AddPass(Pass("ObjectInstanceMappingTransfer", {}, {"ObjectInstanceMapping"}, [](vg::CmdBuffer &cmdBuffer) {
+    }));
+
+    graph.AddPass(Pass(
+        "DepthPrepass", {"VertexBuffer", "IndexBuffer", "ObjectInstanceMapping"}, {"DepthBuffer"},
+        [](vg::CmdBuffer &cmdBuffer) {
+            cmdBuffer.Append(
+                BeginRenderpass(
+                    depthOnlyPass, depthPrepassFramebuffer, {0, 0}, {swapchain.GetWidth(), swapchain.GetHeight()},
+                    {vg::ClearDepthStencil{1.0f, 0U}}, vg::SubpassContents::Inline
+                ),
+                PushConstants(
+                    depthOnlyPass.GetPipelineLayouts()[0], vg::ShaderStage::Vertex, 0,
+                    std::make_tuple(0, cameraPosition, cameraViewProjection)
+                ),
+                BindMeshBuffers(gpuRenderers[frameIndex].instanceMapping),
+                SetViewport(Viewport(swapchain.GetWidth(), swapchain.GetHeight())),
+                SetScissor(Scissor(swapchain.GetWidth(), swapchain.GetHeight())),
+                BindDescriptorSets(
+                    depthOnlyPass.GetPipelineLayouts()[0], vg::PipelineBindPoint::Graphics, 0,
+                    {descriptorSets[frameIndex]}
+                ),
+                DrawFromBuffer(&depthOnlyPass, gpuRenderers[frameIndex].drawCalls), EndRenderpass()
+            );
+        }
+    ));
+
+    graph.AddPass(Pass("ClearDrawingInstructions", {"DrawCallBuffer"}));
 
     Debug::Init();
 

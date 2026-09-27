@@ -15,7 +15,7 @@ class MeshArray {
     MeshArray &operator=(const MeshArray &) = delete;
     ~MeshArray();
 
-  private:
+    // private:
     friend class Renderer;
     friend class Mesh;
     RenderBuffer vertexBuffer;

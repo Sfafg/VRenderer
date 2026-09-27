@@ -1,8 +1,11 @@
 #include "Material.h"
 #include "Renderer.h"
 #include "Batch.h"
+#include "Shader.h"
 #include <cassert>
 #include <iostream>
+#include <type_traits>
+#include <utility>
 
 MaterialArray *Material::materialArray = nullptr;
 
@@ -14,7 +17,7 @@ MaterialArray::MaterialArray() {}
 
 MaterialArray::MaterialArray(MaterialArray &&o) : MaterialArray() {
     std::swap(materialBuffer, o.materialBuffer);
-    std::swap(subpasses, o.subpasses);
+    std::swap(materialInfos, o.materialInfos);
     std::swap(materials, o.materials);
 }
 
@@ -22,7 +25,7 @@ MaterialArray &MaterialArray::operator=(MaterialArray &&o) {
     if (this == &o) return *this;
 
     std::swap(materialBuffer, o.materialBuffer);
-    std::swap(subpasses, o.subpasses);
+    std::swap(materialInfos, o.materialInfos);
     std::swap(materials, o.materials);
 
     return *this;
@@ -30,18 +33,34 @@ MaterialArray &MaterialArray::operator=(MaterialArray &&o) {
 
 MaterialArray::~MaterialArray() {}
 
-Material::Material(bool isTransparent, vg::Subpass &&subpass, ByteView materialData) : variant(0) {
-    uint byteSize = materialData.Size();
-    const void *data = materialData.Ptr();
+MaterialArray::MaterialInfo::MaterialInfo(
+    vg::Shader &&vertexShader, vg::Shader &&fragmentShader, const vg::Subpass &subpass, bool isTransparent
+)
+    : vertexShader(std::move(vertexShader)), fragmentShader(std::move(fragmentShader)), subpass(subpass),
+      isTransparent(isTransparent) {}
+
+std::vector<vg::Subpass> MaterialArray::GetSubpasses() const {
+    std::vector<vg::Subpass> subpasses;
+    for (auto &mat : materialInfos) {
+        subpasses.push_back(mat.subpass);
+        subpasses.back().graphicsPipeline.shaders = {&mat.vertexShader, &mat.fragmentShader};
+    }
+
+    return subpasses;
+}
+
+Material::Material(MaterialArray::MaterialInfo &&materialInfo, ByteView data) : variant(0) {
+    uint byteSize = data.Size();
+    const void *dataPtr = data.Ptr();
 
     assert(materialArray && "Current materialArray needs to be assigned!");
 
-    materialArray->subpasses.emplace_back(std::move(subpass));
-
     index = materialArray->materialBuffer.Allocate(byteSize, byteSize);
-    if (data) materialArray->materialBuffer.Write(index, data, byteSize);
+    if (dataPtr) materialArray->materialBuffer.Write(index, dataPtr, byteSize);
+
+    materialArray->materialInfos.emplace_back(std::move(materialInfo));
     materialArray->materials.push_back({this});
-    materialArray->isTransparent.push_back(isTransparent);
+
     Renderer::RecreateRenderpass();
 }
 
@@ -84,7 +103,7 @@ Material::Material(
           vg::ColorBlending(
               createInfo.enableLogicOp, createInfo.logicOp, createInfo.blendConsts, createInfo.attachments
           ),
-          createInfo.dynamicState, createInfo.colorAttachments, 0, materialData
+          createInfo.dynamicState, createInfo.colorAttachments, materialData
       ) {}
 
 Material::Material(
@@ -92,21 +111,21 @@ Material::Material(
     vg::InputAssembly &&inputAssembly, vg::ViewportState &&viewportState, vg::Rasterizer &&rasterizer,
     vg::DepthStencil &&depthStencil, vg::ColorBlending &&colorBlending,
     const std::vector<vg::DynamicState> &dynamicState, const std::vector<vg::AttachmentReference> &colorAttachments,
-    uint32_t childrenCount, ByteView materialData
+    ByteView materialData
 )
     : Material(
-          isTransparent,
-          vg::Subpass(
-              vg::GraphicsPipeline(
-                  0,
-                  Vector{
-                      vg::Shader(vg::ShaderStage::Vertex, vertexShaderPath),
-                      vg::Shader(vg::ShaderStage::Fragment, fragmentShaderPath)
-                  },
-                  vertexInput, inputAssembly, vg::Tesselation(), viewportState, rasterizer, vg::Multisampling(),
-                  depthStencil, colorBlending, dynamicState, childrenCount
+          MaterialArray::MaterialInfo(
+              vg::Shader(vg::ShaderStage::Vertex, vertexShaderPath),
+              vg::Shader(vg::ShaderStage::Fragment, fragmentShaderPath),
+              vg::Subpass(
+                  vg::GraphicsPipeline(
+                      0, {}, vertexInput, inputAssembly, vg::Tesselation(), viewportState, rasterizer,
+                      vg::Multisampling(), depthStencil, colorBlending, dynamicState
+                  ),
+                  {}, colorAttachments, {}, vg::AttachmentReference(1, vg::ImageLayout::DepthStencilAttachmentOptimal),
+                  {}
               ),
-              {}, colorAttachments, {}, vg::AttachmentReference(1, vg::ImageLayout::DepthStencilAttachmentOptimal), {}
+              isTransparent
           ),
           materialData
       ) {}
@@ -145,11 +164,10 @@ Material::~Material() {
     materialArray->materials[index].erase(materialArray->materials[index].begin() + variant);
     if (lastVariant) {
         materialArray->materials.erase(materialArray->materials.begin() + index);
-        materialArray->isTransparent.erase(materialArray->isTransparent.begin() + index);
 
         BatchArray::batchArray->drawCallArray.NotifyMaterialDestroy(index);
         materialArray->materialBuffer.Deallocate(index);
-        materialArray->subpasses.erase(materialArray->subpasses.begin() + index);
+        materialArray->materialInfos.erase(materialArray->materialInfos.begin() + index);
         for (int i = index; i < materialArray->materials.size(); i++)
             for (int j = 0; j < materialArray->materials[i].size(); j++) materialArray->materials[i][j]->index--;
 
@@ -184,7 +202,7 @@ void Material::Read(void *data, uint32_t readSize, uint32_t offset) {
 
 bool Material::IsTransparent() const {
     assert(materialArray && "MaterialArray needs to be assigned!");
-    return materialArray->isTransparent[index];
+    return materialArray->materialInfos[index].isTransparent;
 }
 
 uint Material::GetMaterialDataIndex() const {

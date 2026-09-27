@@ -59,23 +59,21 @@ class Renderer {
     uint maxFramesInFlight;
     vg::Surface surface;
     vg::Swapchain swapchain;
-    vg::Image depthImage;
-    vg::ImageView depthImageView;
-    vg::Framebuffer depthPrepassFramebuffer;
 
     std::vector<HiZBuffer> hiZBuffers;
     std::vector<GPURenderer> gpuRenderers;
+    vg::Image depthImage;
+    vg::ImageView depthImageView;
+    vg::Framebuffer depthPrepassFramebuffer;
+    vg::RenderPass renderPass;
 
     std::vector<HiZBuffer> shadowhiZBuffers;
     std::vector<GPURenderer> shadowgpuRenderers;
-
     vg::Image shadowImage;
     vg::ImageView shadowImageView;
     vg::Sampler shadowSampler;
     vg::Framebuffer shadowFramebuffer;
     vg::RenderPass depthOnlyPass;
-
-    vg::RenderPass renderPass;
 
     vg::DescriptorPool descriptorPool;
     std::vector<vg::DescriptorSet> descriptorSets;
